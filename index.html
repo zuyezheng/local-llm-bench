@@ -393,7 +393,7 @@ function chartWarmup(){
   });
   Plotly.react("chartWarmup",traces,{...layoutBase(),
     xaxis:{title:"context at this turn (tokens)"},
-    yaxis:{title:"accumulated session time (s) — the last point is the total"},
+    yaxis:{title:"accumulated session time (s) — the last point is the total",range:[0,undefined]},
     title:{text:"Accumulated time across the warm session — "+firstCohort(MODEL).model_short,font:{size:14}},
     legend:legBelow(),margin:{l:64,r:24,t:56,b:92}});
   const rows=HOSTS.map(h=>{const c=cohort(h,MODEL); return c&&c.turns.length?{c,tot:c.session_s}:null;}).filter(Boolean).sort((a,b)=>a.tot-b.tot);
@@ -491,7 +491,7 @@ function chartConc(){
     const traces=hosts.map(c=>line(c,users.map(u=>sp.get(c,u)),sp.ylab,pi));
     Plotly.react(ids[pi],traces,{...layoutBase(),showlegend:false,legend:{visible:false},
       title:{text:sp.t,font:{size:12}},margin:{l:52,r:14,t:46,b:40},
-      xaxis:{title:pi===0?"concurrent streams (1 = single user)":"",dtick:1},yaxis:{title:sp.ylab}});
+      xaxis:{title:pi===0?"concurrent streams (1 = single user)":"",dtick:1},yaxis:{title:sp.ylab,range:[0,undefined]}});
   });
   // shared legend once, below all four panels
   $("#concLegend").innerHTML = hosts.map(c=>
@@ -519,7 +519,7 @@ function chartVsDgx(){
       tr("M5 Ultra",p.m,"#0ea5e9",0.55)],
       {...layoutBase(),showlegend:false,legend:{visible:false},
        title:{text:p.t,font:{size:12}},margin:{l:56,r:14,t:46,b:40},
-       yaxis:{title:p.ylab},xaxis:{title:""}});
+       yaxis:{title:p.ylab,range:[0,undefined]},xaxis:{title:""}});
   });
   $("#vsdgxLegend").innerHTML =
     `<span><span class="sw" style="background:#059669"></span>DGX Spark ×2</span>`+
@@ -566,7 +566,7 @@ function chartPow(){
       hovertemplate:"<b>%{x}</b><br>%{y:.2f} tok/s per W<extra></extra>"};
     Plotly.react(p.id,[tr],{...layoutBase(),showlegend:false,legend:{visible:false},
       title:{text:p.t+" — "+p.note,font:{size:12}},margin:{l:56,r:20,t:44,b:40},
-      xaxis:{title:"",tickangle:-30,tickfont:{size:7.5}},yaxis:{title:"tok/s per W"}});
+      xaxis:{title:"",tickangle:-30,tickfont:{size:7.5}},yaxis:{title:"tok/s per W",range:[0,undefined]}});
   });
   $("#powLegend").innerHTML=hosts.map(c=>
     `<span><span class="sw" style="background:${c.host_color}"></span>${c.host_display}</span>`).join("");
