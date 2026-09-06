@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local LLM Bench</title>
+<script src="vendor/plotly.min.js"></script>
+<style>
+  :root{
+    --ink:#1f2430; --muted:#5b6472; --line:#e7e9ee; --bg:#f6f7fa; --card:#ffffff;
+    --hero1:#0b1220; --hero2:#1e293b; --accent:#38bdf8; --accent2:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.55}
+  a{color:#1d4ed8;text-decoration:none}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 22px}
+  /* hero */
+  header{background:linear-gradient(135deg,var(--hero1),var(--hero2));color:#e6ecf6;padding:58px 0 44px}
+  header .kicker{letter-spacing:.14em;text-transform:uppercase;font-size:12px;color:#7dd3fc;font-weight:700}
+  header h1{font-size:clamp(26px,4vw,40px);line-height:1.15;margin:12px 0 14px;font-weight:800}
+  header p.lede{max-width:820px;color:#b8c3d6;font-size:16px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-top:30px}
+  .stat{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:16px 18px}
+  .stat .v{font-size:26px;font-weight:800;color:#fff}
+  .stat .v small{font-size:14px;color:#9fb0c8;font-weight:600}
+  .stat .l{font-size:12.5px;color:#93a5c0;margin-top:3px}
+  /* nav */
+  nav{position:sticky;top:0;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);z-index:50}
+  nav .wrap{display:flex;gap:4px;flex-wrap:wrap;padding:8px 22px}
+  nav a{font-size:13.5px;font-weight:600;color:var(--muted);padding:7px 11px;border-radius:8px}
+  nav a:hover{color:var(--ink);background:#eef1f6}
+  .nav-model{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .nav-model .uni-label{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .nav-model .seg{background:#e9edf3}
+  .nav-model .seg button{padding:6px 11px;font-size:12.5px}
+  .universal{display:flex;align-items:center;gap:12px;margin-top:26px;flex-wrap:wrap}
+  .uni-label{font-size:13px;font-weight:700;color:#7dd3fc;text-transform:uppercase;letter-spacing:.08em}
+  .universal .seg{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15)}
+  .universal .seg button{color:#cbd5e1}
+  .universal .seg button.on{background:#0ea5e9;color:#fff;box-shadow:none}
+  .uni-hint{font-size:12px;color:#93a5c0}
+  /* sections */
+  section{padding:46px 0 8px}
+  section h2{font-size:24px;margin:0 0 6px;font-weight:800}
+  section .sub{color:var(--muted);max-width:900px;margin:0 0 22px;font-size:15px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:26px;box-shadow:0 1px 3px rgba(16,24,40,.05)}
+  .card h3{margin:0 0 4px;font-size:16px}
+  .card .cap{color:var(--muted);font-size:13px;margin:6px 0 0}
+  .chart{width:100%}
+  /* controls */
+  .controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+  .seg{display:inline-flex;background:#e9edf3;border-radius:10px;padding:3px}
+  .seg button{border:0;background:transparent;padding:8px 15px;border-radius:8px;font-size:13.5px;font-weight:700;color:var(--muted);cursor:pointer}
+  .seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(16,24,40,.15)}
+  .seg button .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+  .seg button .dot.d-moe{background:#1d4ed8}.seg button .dot.d-dense{background:#dc2626}.seg button .dot.d-deepseek{background:#111827}
+  select,label.pill{font-size:13.5px;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink)}
+  .hint{font-size:12.5px;color:var(--muted)}
+  .conc-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:12px;color:var(--muted)}
+  .conc-legend .sw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .gridflex{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+  .gridbud{display:flex;flex-wrap:wrap;justify-content:center;gap:14px}
+  .budpanel{width:330px;flex:0 0 330px;max-width:100%}
+  .grid4{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:900px){ .grid3{grid-template-columns:1fr} }
+  @media(max-width:720px){ .grid4{grid-template-columns:1fr} }
+  /* tables */
+  table{border-collapse:collapse;width:100%;font-size:13.5px}
+  th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--muted);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  td.l,th.l{text-align:left}
+  tbody tr:hover{background:#f3f6fb}
+  .num{font-variant-numeric:tabular-nums}
+  /* verdict */
+  .recs{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+  .rec{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;padding:16px 18px}
+  .rec .h{font-weight:800;font-size:15px;margin-bottom:6px}
+  .rec p{margin:0;font-size:13.5px;color:#3c4451}
+  .callout{background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 16px;font-size:14px;margin:16px 0}
+  .callout b{color:#1e40af}
+  footer{color:var(--muted);font-size:13px;padding:30px 0 50px}
+  footer h4{color:var(--ink);margin:22px 0 6px}
+  code{background:#eef1f6;padding:1px 5px;border-radius:5px;font-size:12.5px}
+  .bignum{font-size:22px;font-weight:800}
+  .pill-warn{background:#fef3c7;border:1px solid #fde68a}
+  @media(max-width:720px){ .stats{grid-template-columns:1fr 1fr} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>Local LLM Bench</h1>
+  </div>
+</header>
+
+<nav><div class="wrap">
+  <a href="#story">Context length</a>
+  <a href="#timeline">Warm cache</a>
+  <a href="#budget">Where the time goes</a>
+  <a href="#conc">Concurrency</a>
+  <a href="#power">Power &amp; efficiency</a>
+  <a href="#verdict">What to buy</a>
+  <a href="#method">Fine print</a>
+  <span class="nav-model">
+    <span class="uni-label">Model:</span>
+    <div class="seg" id="modelSegGlobal"></div>
+  </span>
+</div></nav>
+
+<main class="wrap">
+
+  <!-- ============================ 1. CONTEXT LENGTH ============================ -->
+  <section id="story">
+    <h2>1 · Context Length</h2>
+    <p class="sub">
+      Cold cache, a fresh prompt each request, context growing <b>1k &rarr; 200k</b> (400k for
+      DeepSeek V4) — the big picture, not a coding-only lens. The two rates that matter per context:
+      <b>prefill</b> (prompt processing tok/s) and <b>generation</b> (decode tok/s). Prefill is
+      where devices diverge most — and it's what dominates real coding/agentic turns (big context,
+      small reply).
+    </p>
+    <div class="card"><div class="grid2">
+      <div><div id="ctx1" class="chart" style="height:360px"></div></div>
+      <div><div id="ctx2" class="chart" style="height:360px"></div></div>
+    </div>
+    <div id="ctxLegend" class="conc-legend"></div>
+    </div>
+    <div class="callout" id="ctxCallout"></div>
+  </section>
+
+  <!-- ============================ 2. WARM CACHE ============================ -->
+  <section id="timeline">
+    <h2>2 · Warm cache</h2>
+    <p class="sub">
+      One growing session: 6 turns, context 40k&rarr;50k, every turn sharing the previous one's prefix.
+      Turn 1 misses the cache; turns 2&ndash;6 hit it. Top: the <b>accumulated</b> wall-clock across
+      the whole session per device — the slope between turns is one cached turn, and the final value is
+      the total time spent. Do the Macs catch up? (Apple numbers assume the same prefix caching.)
+      Below, the same warm session as a <b>heatmap</b> (hosts &times; turns; greener = faster) so you
+      can read the warm-up across every box at a glance.
+    </p>
+    <div class="card"><div id="chartWarmup" class="chart" style="height:380px"></div></div>
+    <div class="card"><div id="chartHeat" class="chart" style="height:400px"></div></div>
+    <div class="callout" id="warmupCallout"></div>
+  </section>
+
+  <!-- ============================ 3. TIME BUDGET (COLD) ============================ -->
+  <section id="budget">
+    <h2>3 · Time spent</h2>
+    <p class="sub">
+      Single user, <b>cold cache</b>, across the full context spread (1k&rarr;200k). Each bar is one
+      device's request, split into <b>prefill</b> (reading the prompt, gray) and <b>generation</b>
+      (streaming the answer, device color), sorted <b>fastest first</b> — shorter is better (green
+      <b>best</b> / red <b>worst</b>). As the context grows, prefill takes over.
+    </p>
+    <div class="card"><div class="gridbud" id="budGrid"></div>
+    <div id="budLegend" class="conc-legend"></div></div>
+  </section>
+
+  <!-- ============================ 5. CONCURRENCY ============================ -->
+  <section id="conc">
+    <h2>4 · Concurrency</h2>
+    <p class="sub">
+      Scale from <b>1 to 6 concurrent streams</b> (multi-user cold, 10k context — distinct contexts,
+      so this isolates concurrency from caching). As more streams pile on: does aggregate throughput
+      rise (batching), stay flat, or fall? And how long does the whole batch take?
+    </p>
+    <div class="card"><div class="grid4">
+      <div><div id="team1" class="chart" style="height:260px"></div></div>
+      <div><div id="team2" class="chart" style="height:260px"></div></div>
+      <div><div id="team3" class="chart" style="height:260px"></div></div>
+      <div><div id="team4" class="chart" style="height:260px"></div></div>
+    </div>
+    <div id="concLegend" class="conc-legend"></div>
+    </div>
+  </section>
+
+  <!-- ============================ 5. POWER & EFFICIENCY ============================ -->
+  <section id="power">
+    <h2>5 · Power &amp; efficiency</h2>
+    <p class="sub">
+      Tokens per watt for <b>prompt processing (PP)</b> and <b>generation (TG)</b>, broken into
+      <b>single-user</b> vs <b>6 concurrent streams</b> (all at 10k context). The DGX Spark ×2 is
+      adjusted <b>+70W per node</b> — its exporter only reads GPU power, so this is the whole-box
+      estimate. M5 Ultra is a projection and has no measured power.
+    </p>
+    <div class="card"><div class="grid4">
+      <div><div id="pow1" class="chart" style="height:260px"></div></div>
+      <div><div id="pow2" class="chart" style="height:260px"></div></div>
+      <div><div id="pow3" class="chart" style="height:260px"></div></div>
+      <div><div id="pow4" class="chart" style="height:260px"></div></div>
+    </div>
+    <div id="powLegend" class="conc-legend"></div>
+    </div>
+  </section>
+
+  <!-- ============================ 6. VERDICT ============================ -->
+  <section id="verdict">
+    <h2>6 · What should you actually buy?</h2>
+    <p class="sub">
+      The "which hardware" answer, in the units you actually care about: minutes of your day, per
+      machine, per model. Then the $5&ndash;8k decision: M5 Ultra or DGX Spark ×2, side by side.
+    </p>
+    <div class="recs" id="recs"></div>
+
+    <!-- ======== merged: M5 Ultra vs DGX Spark ×2 ======== -->
+    <div id="vsdgx" style="margin-top:34px">
+      <h3>M5 Ultra or DGX Spark ×2</h3>
+      <p class="sub">
+        <b>DGX Spark ×2</b> is the <b>measured</b> 2-node cluster (~$8k); <b>M5 Ultra</b> is the
+        projected Mac Studio (1.2 TB/s, 80-core GPU — $5,499 @ 96 GB, ~$12k @ 256 GB,
+        ~$20k+ @ 512 GB). Four comparisons: decode speed, prompt ingestion, a real agentic turn
+        (50k context, 500-token reply), and a 6-stream batch.
+      </p>
+      <div class="card">
+        <div class="grid4">
+          <div><div id="vsd1" class="chart" style="height:230px"></div></div>
+          <div><div id="vsd2" class="chart" style="height:230px"></div></div>
+          <div><div id="vsd3" class="chart" style="height:230px"></div></div>
+          <div><div id="vsd4" class="chart" style="height:230px"></div></div>
+        </div>
+        <div id="vsdgxLegend" class="conc-legend"></div>
+        <div class="callout" id="vsdgxCallout"></div>
+        <div class="callout pill-warn"><b>Price reality check:</b> M5 Ultra is <b>$5,499 @ 96 GB</b>,
+          <b>~$12k @ 256 GB</b>, <b>~$20k+ @ 512 GB</b>. The 512 GB tier — the one that lets it hold
+          frontier-scale models the 128 GB DGX can't — costs <b>~2.5x a DGX Spark ×2 cluster (~$8k)</b>
+          or an RTX PRO 6000 box that still beats it on teams and long sessions. The fast-single-user
+          value case only holds at the 96 GB price; the big-memory advantage is real but paid for at a
+          steep premium.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ METHOD ============================ -->
+  <section id="method">
+    <h2>The fine print</h2>
+    <div class="card">
+      <p>
+        <b>What was measured.</b> The <code>warm</code> phase of each run is one contiguous corpus
+        growing 40k&rarr;50k in 2k-token turns — a coding session that keeps appending. Session
+        wall-clock is the sum of each turn's measured <code>total_ms</code>. The no-cache estimate
+        re-prices every turn at cold-cache prefill cost for its context length (log&ndash;log
+        interpolated from measured cold points) plus the same measured generation time — what the
+        session would've cost if the server forgot the prefix every turn. Multi-user numbers sum
+        the concurrent-batch wall span per warm step.
+      </p>
+      <p>
+        <b>Caveats.</b> No think-time between turns, so this is the best case for a session.
+        Single runs, so individual cells will wobble. Apple's prefix caching is a config thing,
+        not a hardware limit — Qwen3.6/Qwen3.8 on MLX re-processed every turn here
+        (warm&nbsp;&asymp;&nbsp;cold), but DeepSeek V4 on the same Mac did cache (2.6x speedup), so
+        bigger models get more out of it. Power/efficiency figures use the 50k runs since they're
+        long enough to sample cleanly. <b>Qwen3.6/Qwen3.8 single-user numbers are run-averaged</b>
+        across each machine's complete runs (smooths noisy decode); concurrent batches stay on the
+        latest run since streams can't be aligned across runs. Run selection, concurrency math, and
+        repro scripts live in <code>analysis/</code>.
+      </p>
+      <p>
+        <b>Model quants.</b> Every model ran at the <b>largest quantization that fits</b> its
+        machine, and we standardized the format across machines wherever it fits. The Apple
+        Macs (M5 Max, M3 Ultra) ran <b>MLX</b> quantized weights: <b>8-bit</b> for the
+        Qwen3.6-35B-A3B MoE, <b>4-bit</b> for the Qwen3.8-27B dense and for DeepSeek-V4-Flash.
+        The NVIDIA Blackwell boxes (vLLM) ran <b>NVFP4</b> — NVIDIA's 4-bit float, W4A4,
+        E2M1 values with an FP8 scale per 16-value block — for the dense 27B on all three, and
+        for the 35B MoE on the 32&nbsp;GB RTX&nbsp;5090; where memory allows (DGX Spark ×2,
+        RTX PRO 6000) the MoE ran at higher fidelity <b>FP8</b> (8-bit float). DeepSeek-V4-Flash
+        on the DGX used the <b>official release checkpoint</b>, which already ships quantized at
+        the source — MXFP4 4-bit routed experts with FP8 elsewhere (284B total, 13B active) — and
+        the Mac served a matching 4-bit MLX conversion. Quantization level is thus comparable
+        within a hardware family, but not bit-identical across them; read the absolute rates
+        with that in mind.
+      </p>
+      <p id="m5uFinePrint"></p>
+    </div>
+    <footer>
+      <h4>Reproduce</h4>
+      <p><code>uv run python analysis/site_data.py</code> regenerates <code>analysis/site/data.js</code>
+      from the raw <code>results/</code> directories; open this page to render the charts.</p>
+    </footer>
+  </section>
+
+</main>
+
+<script src="data.js"></script>
+<script>
+/* ---------------- helpers ---------------- */
+const D = window.SITE_DATA;
+const $ = s => document.querySelector(s);
+const HOSTS = D.hosts;
+const MODELS = [["qwen3.6-dflash","MoE"],["qwen3.8-dflash","Dense"],["deepseekv4","DeepSeek"]];
+const MCOLOR = {"MoE":"#1d4ed8","Dense":"#dc2626","DeepSeek":"#111827"};
+let MODEL = "qwen3.6-dflash";
+const COH = {};
+for (const k in D.cohorts){ const c=D.cohorts[k]; COH[c.host+"|"+c.scenario]=c; }
+const cohort = (h,sc)=>COH[h+"|"+sc];
+
+function fmtDur(s){
+  if(s==null||!isFinite(s)) return "—";
+  if(s<1) return (s*1000).toFixed(0)+"ms";
+  if(s<90) return s.toFixed(1)+"s";
+  const r=Math.round(s), m=Math.floor(r/60), sec=r-60*m;
+  return m+"m"+(sec? " "+String(sec).padStart(2,"0")+"s":"");
+}
+function fmtTps(v){ return v==null||!isFinite(v) ? "—" : v.toFixed(1); }
+function hostColor(h){ return D.host_meta[h].color; }
+function hostLabel(h){ return D.host_meta[h].display; }
+const isProj = h => !!(D.host_meta[h] && D.host_meta[h].projected);
+
+function layoutBase(){
+  return {
+    font:{family:"-apple-system,Segoe UI,Roboto,sans-serif",size:12,color:"#1f2430"},
+    paper_bgcolor:"rgba(0,0,0,0)", plot_bgcolor:"rgba(0,0,0,0)",
+    margin:{l:64,r:24,t:52,b:58},
+    hoverlabel:{align:"left"},
+  };
+}
+// legend pinned BELOW the plot so it never collides with the title/axis
+function legBelow(){ return {orientation:"h",y:-0.32,x:0,font:{size:10.5}}; }
+
+/* ---------------- segmented controls ---------------- */
+function firstCohort(sc){ const k=HOSTS.map(h=>sc+"__"+h).find(k=>D.cohorts[k]); return D.cohorts[k]; }
+function makeSeg(id, onChange){
+  const el=$(id); el.innerHTML="";
+  MODELS.forEach(([sc,label])=>{
+    const b=document.createElement("button");
+    b.innerHTML=`<span class="dot d-${label.toLowerCase()}"></span>${firstCohort(sc).model_short}`;
+    b.onclick=()=>{ el.querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); MODEL=sc; onChange(sc); };
+    el.appendChild(b);
+    if(sc===MODEL) b.classList.add("on");
+  });
+}
+
+/* ---------------- chart 1: context length — prefill & generation rates ---------------- */
+function modelCtxs(){
+  const c=HOSTS.map(h=>cohort(h,MODEL)).find(c=>c&&c.cold_by);
+  return c ? Object.keys(c.cold_by).map(Number).sort((a,b)=>a-b) : [1000,10000,50000,100000,200000];
+}
+function chartCtxRates(){
+  const ctxs=modelCtxs();
+  const panels=[
+    {id:"ctx1", key:"pp", title:"prefill — prompt processing (tok/s)", ylab:"tok/s"},
+    {id:"ctx2", key:"tg", title:"generation — decode (tok/s)", ylab:"tok/s"},
+  ];
+  let legendHosts=null;
+  panels.forEach(p=>{
+    const traces=[];
+    HOSTS.forEach(h=>{
+      const c=cohort(h,MODEL); if(!c||!c.cold_by) return;
+      traces.push({type:"scatter",mode:"lines+markers",name:c.host_display,x:ctxs.slice(),
+        y:ctxs.map(x=>{const v=c.cold_by[x]; return v?v[p.key]:null;}),
+        line:{color:c.host_color,width:2.5,dash:c.projected?"dot":"solid"},
+        marker:{size:6,color:c.host_color,symbol:c.projected?"diamond-open":"circle"},
+        hovertemplate:"<b>"+c.host_display+"</b><br>context %{x:,} tokens<br>%{y:,.0f} tok/s<extra></extra>"});});
+    Plotly.react(p.id,traces,{...layoutBase(),showlegend:false,legend:{visible:false},
+      xaxis:{type:"log",title:"context length (tokens)",tickvals:ctxs,ticktext:ctxs.map(x=>x/1000+"k")},
+      yaxis:{title:p.ylab,range:[0,undefined]},
+      title:{text:p.title+" — higher is better",font:{size:13}},margin:{l:56,r:16,t:44,b:46}});
+    if(!legendHosts) legendHosts=traces.map(t=>({name:t.name,color:t.line.color}));
+  });
+  $("#ctxLegend").innerHTML=(legendHosts||[]).map(c=>
+    `<span><span class="sw" style="background:${c.color}"></span>${c.name}</span>`).join("");
+}
+
+function ctxCallout(){
+  const ctx=50000;
+  const rows=HOSTS.map(h=>{const c=cohort(h,MODEL); const v=c&&c.cold_by&&c.cold_by[ctx]; return v?{c,pp:v.pp,tg:v.tg}:null;})
+    .filter(Boolean).sort((a,b)=>b.pp-a.pp);
+  if(!rows.length) return;
+  const best=rows[0], worst=rows[rows.length-1];
+  const maxTG=rows.reduce((m,r)=>Math.max(m,r.tg||0),0);
+  $("#ctxCallout").innerHTML =
+    `Prefill is where these boxes diverge. At ${ctx/1000}k context, <b>${best.c.host_display} reads prompts at ~${fmtTps(best.pp)} tok/s</b> `+
+    `vs ${worst.c.host_display} at ~${fmtTps(worst.pp)} — a <b>${(best.pp/worst.pp).toFixed(0)}x gap</b>. `+
+    `Generation is much closer (best ~${fmtTps(maxTG)} tok/s). Since coding/agentic turns are prefill-dominated `+
+    `(big context, small reply), that prefill gap is what you actually feel.`;
+}
+
+/* ---------------- chart 2: warm cache — accumulated session time ---------------- */
+function chartWarmup(){
+  const traces=[];
+  HOSTS.forEach(h=>{
+    const c=cohort(h,MODEL); if(!c||!c.turns.length) return;
+    let cum=0; const xs=[],ys=[],txt=[];
+    c.turns.forEach(t=>{cum+=t.total_ms/1000; xs.push(t.step/1000+"k"); ys.push(+cum.toFixed(2)); txt.push(fmtDur(t.total_ms/1000));});
+    traces.push({type:"scatter",mode:"lines+markers",name:c.host_display,x:xs,y:ys,
+      line:{color:c.host_color,width:2.5,dash:c.projected?"dot":"solid"},
+      marker:{size:6,color:c.host_color,symbol:c.projected?"diamond-open":"circle"},
+      text:txt,
+      hovertemplate:`<b>${c.host_display}</b><br>context %{x}<br>accumulated %{y:.1f}s<br>this turn: %{text}<extra></extra>`});
+  });
+  Plotly.react("chartWarmup",traces,{...layoutBase(),
+    xaxis:{title:"context at this turn (tokens)"},
+    yaxis:{title:"accumulated session time (s) — the last point is the total"},
+    title:{text:"Accumulated time across the warm session — "+firstCohort(MODEL).model_short,font:{size:14}},
+    legend:legBelow(),margin:{l:64,r:24,t:56,b:92}});
+  const rows=HOSTS.map(h=>{const c=cohort(h,MODEL); return c&&c.turns.length?{c,tot:c.session_s}:null;}).filter(Boolean).sort((a,b)=>a.tot-b.tot);
+  if(!rows.length) return;
+  const fast=rows[0], slow=rows[rows.length-1];
+  const mac=rows.filter(r=>D.host_meta[r.c.host].class==="Apple"&&!isProj(r.c.host)).sort((a,b)=>a.tot-b.tot)[0];
+  const gpu=rows.filter(r=>D.host_meta[r.c.host].class==="NVIDIA").sort((a,b)=>a.tot-b.tot)[0];
+  $("#warmupCallout").innerHTML =
+    `Over the whole warm session, total time spent: <b>${fast.c.host_display} ${fmtDur(fast.tot)}</b> to `+
+    `<b>${slow.c.host_display} ${fmtDur(slow.tot)}</b>. `+
+    (mac&&gpu ? `Do the Macs catch up? <b>${mac.tot<gpu.tot?"Yes":"No"}</b> — `+
+      (mac.tot<gpu.tot
+        ? `on ${firstCohort(MODEL).model_short} the ${mac.c.host_display} finishes in ${fmtDur(mac.tot)}, ahead of the fastest NVIDIA box (${fmtDur(gpu.tot)}).`
+        : `on ${firstCohort(MODEL).model_short} the ${mac.c.host_display} takes ${fmtDur(mac.tot)} vs the fastest NVIDIA box at ${fmtDur(gpu.tot)}.`) : ``);
+}
+
+/* ---------------- chart 3: cold time budget across context lengths ---------------- */
+function chartBudget(){
+  const hosts=HOSTS.map(h=>cohort(h,MODEL)).filter(c=>c&&c.cold_by);
+  if(!hosts.length) return;
+  // contexts available for this model (DeepSeek V4 also has 400k), ascending
+  const ctxs=Object.keys(hosts[0].cold_by).map(Number).sort((a,b)=>a-b);
+  const grid=$("#budGrid");
+  grid.innerHTML=ctxs.map((c,i)=>`<div class="budpanel"><div id="bud${i}" class="chart" style="height:300px"></div></div>`).join("");
+  let legendHosts=null;
+  ctxs.forEach((ctx,pi)=>{
+    // build host rows, then sort by TOTAL time (shortest = best first)
+    let rows=[];
+    hosts.forEach(c=>{const v=c.cold_by[ctx]; if(v) rows.push({c,pre:v.ttft_ms/1000,gen:v.gen_ms/1000,tot:(v.ttft_ms+v.gen_ms)/1000});});
+    rows.sort((a,b)=>a.tot-b.tot);
+    const lab=rows.map(r=>r.c.host_display), pre=rows.map(r=>r.pre), gen=rows.map(r=>r.gen);
+    const traces=[
+      {type:"bar",orientation:"h",name:"prefill",y:lab,x:pre,marker:{color:"#94a3b8"},
+       hovertemplate:"<b>%{y}</b><br>prefill %{x:.1f}s<extra></extra>"},
+      {type:"bar",orientation:"h",name:"generation",y:lab,x:gen,marker:{color:rows.map(r=>r.c.host_color)},
+       text:rows.map((r,i)=>i===0?"best":(i===rows.length-1?"worst":"")),
+       textposition:"outside",textfont:{size:9,color:rows.map((r,i)=>i===0?"#15803d":"#b91c1c")},
+       hovertemplate:"<b>%{y}</b><br>generation %{x:.1f}s · total %{customdata:.1f}s<extra></extra>",
+       customdata:rows.map(r=>r.tot)}];
+    Plotly.react("bud"+pi,traces,{...layoutBase(),barmode:"stack",showlegend:false,legend:{visible:false},
+      title:{text:"context "+(ctx/1000)+"k",font:{size:13}},
+      margin:{l:150,r:26,t:40,b:34},xaxis:{title:""},
+      yaxis:{title:"",autorange:"reversed"}});
+    if(!legendHosts) legendHosts=rows.map(r=>({name:r.c.host_display,color:r.c.host_color}));
+  });
+  // one shared legend under all panels so every chart stays the same size
+  $("#budLegend").innerHTML =
+    `<span><span class="sw" style="background:#94a3b8"></span>prefill</span>`+
+    (legendHosts||[]).map(c=>`<span><span class="sw" style="background:${c.color}"></span>generation · ${c.name}</span>`).join("");
+}
+
+/* ---------------- chart 4: every machine at once ---------------- */
+function chartHeat(){
+  let hosts=HOSTS.map(h=>cohort(h,MODEL)).filter(c=>c&&c.turns.length);
+  if(!hosts.length) return;
+  // sort rows by speed at the 40k turn (fastest at the top)
+  hosts=hosts.slice().sort((a,b)=>{
+    const at=a.turns.find(t=>t.step===40000), bt=b.turns.find(t=>t.step===40000);
+    return (at?at.total_ms:Infinity)-(bt?bt.total_ms:Infinity);
+  });
+  const steps=hosts[0].turns.map(t=>t.step);
+  const z=hosts.map(c=> c.turns.map(t=> t.total_ms/1000));
+  const txt=hosts.map(c=> c.turns.map(t=> fmtDur(t.total_ms/1000)));
+  Plotly.react("chartHeat",[{type:"heatmap",x:steps.map(s=>s/1000+"k"),y:hosts.map(c=>c.host_display),z,
+    text:txt,texttemplate:"%{text}",textfont:{size:9.5,color:"#111827"},
+    colorscale:[[0,"#bbf7d0"],[0.45,"#fef08a"],[1,"#ef4444"]],
+    hovertemplate:"<b>%{y}</b> @ %{x}<br>%{text} for this turn<extra></extra>",
+    colorbar:{title:"seconds",titleside:"right"}}],
+    {...layoutBase(),showlegend:false,
+     title:{text:"How long each turn takes — every machine at once ("+firstCohort(MODEL).model_short+"), sorted by the 40k turn (fastest on top). Greener = faster",font:{size:14}},
+     margin:{l:172,r:74,t:56,b:48},xaxis:{title:"context at this turn"},yaxis:{title:"",autorange:"reversed"}});
+}
+
+/* ---------------- chart 5: concurrency scaling 1->6 ---------------- */
+function chartConc(){
+  const users=[1,2,4,6];
+  const hosts=HOSTS.map(h=>cohort(h,MODEL)).filter(c=>c&&c.conc&&c.conc[1]);
+  const ids=["team1","team2","team3","team4"];
+  const line=(c,ys,ylab,pi)=>({type:"scatter",mode:"lines+markers",name:c.host_display,
+    x:users.slice(),y:ys,
+    line:{color:c.host_color,width:2.5,dash:c.projected?"dot":"solid"},
+    marker:{size:7,color:c.host_color,symbol:c.projected?"diamond-open":"circle"},
+    hovertemplate:"<b>"+c.host_display+"</b><br>"+ylab+": %{y:.1f}<extra></extra>"});
+  const specs=[
+    {t:"aggregate prompt processing (tok/s) — higher is better",
+     get:(c,u)=>c.conc[u]&&c.conc[u].pp, ylab:"tok/s"},
+    {t:"aggregate decode (tok/s) — higher is better",
+     get:(c,u)=>c.conc[u]&&c.conc[u].tg, ylab:"tok/s"},
+    {t:"per-stream latency (s) — lower is better",
+     get:(c,u)=>c.conc[u]&&c.conc[u].lat, ylab:"s"},
+    {t:"time for the whole batch (s) — lower is better",
+     get:(c,u)=>c.conc[u]&&c.conc[u].wall, ylab:"s"},
+  ];
+  specs.forEach((sp,pi)=>{
+    const traces=hosts.map(c=>line(c,users.map(u=>sp.get(c,u)),sp.ylab,pi));
+    Plotly.react(ids[pi],traces,{...layoutBase(),showlegend:false,legend:{visible:false},
+      title:{text:sp.t,font:{size:12}},margin:{l:52,r:14,t:46,b:40},
+      xaxis:{title:pi===0?"concurrent streams (1 = single user)":"",dtick:1},yaxis:{title:sp.ylab}});
+  });
+  // shared legend once, below all four panels
+  $("#concLegend").innerHTML = hosts.map(c=>
+    `<span><span class="sw" style="background:${c.host_color}"></span>${c.host_display}</span>`).join("");
+}
+
+/* ---------------- M5 Ultra vs DGX Spark x2 (merged into 6) ---------------- */
+function chartVsDgx(){
+  const ids=["vsd1","vsd2","vsd3","vsd4"];
+  const dgx2=cohort("gx10-top",MODEL), m5u=cohort("m5ultra",MODEL);
+  if(!dgx2||!m5u){ ids.forEach(id=>{ $("#"+id).innerHTML='<p class="hint">no data for this model</p>'; }); $("#vsdgxCallout").innerHTML=""; return; }
+  const agt = c => { const v=c.cold_by&&c.cold_by[50000]; return v? v.ttft_ms/1000 + 500/(v.tg||1) : null; };
+  const panels=[
+    {t:"prompt processing @50k (tok/s) — higher is better", d:dgx2.cold50_prompt_tps, m:m5u.cold50_prompt_tps, ylab:"tok/s"},
+    {t:"decode @50k (tok/s) — higher is better", d:dgx2.cold50_out_tps, m:m5u.cold50_out_tps, ylab:"tok/s"},
+    {t:"real agentic turn (50k ctx, 500-tok reply, s) — lower is better", d:agt(dgx2), m:agt(m5u), ylab:"s"},
+    {t:"6 streams, batch time @10k (s) — lower is better", d:(dgx2.conc&&dgx2.conc[6]&&dgx2.conc[6].wall)||null, m:(m5u.conc&&m5u.conc[6]&&m5u.conc[6].wall)||null, ylab:"s"},
+  ];
+  panels.forEach((p,i)=>{
+    const tr=(name,val,color,op)=> ({type:"bar",x:[name],y:[val],
+      marker:{color:color,opacity:op,line:{color:color,width:op<1?2.5:0}},
+      hovertemplate:name+"<br>%{y:.1f} "+p.ylab+"<extra></extra>"});
+    Plotly.react(ids[i],[
+      tr("DGX Spark ×2",p.d,"#059669",1),
+      tr("M5 Ultra",p.m,"#0ea5e9",0.55)],
+      {...layoutBase(),showlegend:false,legend:{visible:false},
+       title:{text:p.t,font:{size:12}},margin:{l:56,r:14,t:46,b:40},
+       yaxis:{title:p.ylab},xaxis:{title:""}});
+  });
+  $("#vsdgxLegend").innerHTML =
+    `<span><span class="sw" style="background:#059669"></span>DGX Spark ×2</span>`+
+    `<span><span class="sw" style="background:#0ea5e9"></span>M5 Ultra (projected)</span>`;
+  const fr=n=>n==null||!isFinite(n)?"—":n.toFixed(1);
+  const ms=m5u.cold50_out_tps, d2d=dgx2.cold50_out_tps;
+  const mpp=m5u.cold50_prompt_tps, d2pp=dgx2.cold50_prompt_tps;
+  const m6=(m5u.conc&&m5u.conc[6]&&m5u.conc[6].wall), d6=(dgx2.conc&&dgx2.conc[6]&&dgx2.conc[6].wall);
+  const m5a=agt(m5u), d2a=agt(dgx2);
+  $("#vsdgxCallout").innerHTML =
+    `<b>M5 Ultra decodes ${fr(ms)} tok/s vs ${fr(d2d)} (DGX ×2)</b> — ${(ms/d2d).toFixed(1)}x faster single-user `+
+    `— but only for the <b>small-MoE</b> (Qwen3.6, ~3B active); MoE as a class is a draw, since DeepSeek-V4 `+
+    `(a much larger MoE) decodes at just ~43 tok/s on this same cluster. `+
+    `For a realistic agentic turn (cold 50k context, 500-token reply) <b>prefill dominates</b>, and the two land close: `+
+    `${fr(m5a)}s (M5 Ultra) vs ${fr(d2a)}s (DGX ×2) for MoE. `+
+    `DGX still wins prompt ingest (~${fr(d2pp)} vs ~${fr(mpp)} tok/s) — which matters more the larger the context — and concurrency `+
+    `(6-stream batch ~${fr(d6)}s vs ~${fr(m6)}s). M5 Ultra wins small-MoE single-user decode; DGX wins prefill-heavy and multi-user work.`;
+}
+
+/* ---------------- chart 5b: power & efficiency ---------------- */
+function chartPow(){
+  // efficiency per host at 10k context: single (cold) and 6-concurrent (mucold)
+  const hosts=HOSTS.map(h=>cohort(h,MODEL)).filter(c=>{
+    const cb=c&&c.cold_by&&c.cold_by[10000], cn=c&&c.conc&&c.conc[6];
+    return cb&&cb.power_w!=null&&cn&&cn.power_w!=null&&cb.pp!=null&&cn.pp!=null;
+  });
+  if(!hosts.length){ $("#powLegend").innerHTML=""; return; }
+  const eff=c=>{
+    const cb=c.cold_by[10000], cn=c.conc[6];
+    return {spPP:cb.pp/cb.power_w, spTG:cb.tg/cb.power_w,
+            c6PP:cn.pp/cn.power_w, c6TG:cn.tg/cn.power_w};
+  };
+  const panels=[
+    {id:"pow1",key:"spPP",t:"PP tok/s per W — single user",note:"higher is better"},
+    {id:"pow2",key:"spTG",t:"TG tok/s per W — single user",note:"higher is better"},
+    {id:"pow3",key:"c6PP",t:"PP tok/s per W — 6 concurrent",note:"higher is better"},
+    {id:"pow4",key:"c6TG",t:"TG tok/s per W — 6 concurrent",note:"higher is better"},
+  ];
+  panels.forEach(p=>{
+    const rows=hosts.slice().sort((a,b)=> (eff(b)[p.key]||0)-(eff(a)[p.key]||0));
+    const tr={type:"bar",x:rows.map(c=>c.host_display),y:rows.map(c=>eff(c)[p.key]),
+      text:rows.map(c=>eff(c)[p.key].toFixed(2)),textposition:"outside",cliponaxis:false,
+      marker:{color:rows.map(c=>c.host_color)},
+      hovertemplate:"<b>%{x}</b><br>%{y:.2f} tok/s per W<extra></extra>"};
+    Plotly.react(p.id,[tr],{...layoutBase(),showlegend:false,legend:{visible:false},
+      title:{text:p.t+" — "+p.note,font:{size:12}},margin:{l:56,r:20,t:44,b:40},
+      xaxis:{title:"",tickangle:-30,tickfont:{size:7.5}},yaxis:{title:"tok/s per W"}});
+  });
+  $("#powLegend").innerHTML=hosts.map(c=>
+    `<span><span class="sw" style="background:${c.host_color}"></span>${c.host_display}</span>`).join("");
+}
+
+/* ---------------- verdict ---------------- */
+function verdict(){
+  const byModel=sc=>HOSTS.map(h=>cohort(h,sc)).filter(Boolean);
+  const moe=byModel("qwen3.6-dflash").sort((a,b)=>a.session_s-b.session_s);
+  const dense=byModel("qwen3.8-dflash").sort((a,b)=>a.session_s-b.session_s);
+  const team=sc=>HOSTS.map(h=>cohort(h,sc)).filter(c=>c&&c.team&&c.team[6]).sort((a,b)=>a.team[6]-b.team[6]);
+  const t6=team("qwen3.6-dflash");
+  const rec=(h,txt)=>`<div class="rec"><div class="h">${h}</div><p>${txt}</p></div>`;
+  $("#recs").innerHTML=
+    rec("RTX PRO 6000",
+      `Fastest sessions, and the only card here that doesn't fall over with a team: a 6-turn session
+      takes <b>${fmtDur(moe.find(c=>c.host==="tr-pro-6000").session_s)}</b> (MoE) /
+      ${fmtDur(dense.find(c=>c.host==="tr-pro-6000").session_s)} (dense), and 6 engineers hitting it
+      at once still finish in ~${Math.round(t6.find(c=>c.host==="tr-pro-6000").team[6]/60*10)/10} min.
+      If more than one person needs it, this is the buy.`)+
+    rec("DGX Spark ×2",
+      `Session ${fmtDur(moe.find(c=>c.host==="gx10-top").session_s)}, caches to a
+      ${(moe.find(c=>c.host==="gx10-top").speedup).toFixed(1)}× speedup, and does it at ~80–110 W.
+      The efficient choice for a small team that doesn't need PRO 6000 money.`) +
+    rec("RTX 5090",
+      `Session ${fmtDur(moe.find(c=>c.host==="tr-pro-5090").session_s)} — nearly PRO-6000 speed for
+      about a quarter of the price. The catch: it queues every extra user instead of batching them
+      (0% overlap). Fine if you're the only one using it, bad for teams.`) +
+    rec("Mac Studio / MacBook (M3 Ultra, M5 Max)",
+      `Only makes sense with a MoE model: session ${fmtDur(moe.find(c=>c.host==="m5-max").session_s)}
+      / ${fmtDur(moe.find(c=>c.host==="macstudio").session_s)} once prefix caching actually works.
+      Dense 27B is still slow — ${fmtDur(dense.find(c=>c.host==="macstudio").session_s)} — because
+      the first turn's prefill eats the whole budget and later turns can't make it back.`) +
+    rec("M5 Ultra — not out yet, this is a projection",
+      `On a small MoE model it should out-decode everything else here
+      (~${moe.find(c=>c.host==="m5ultra").cold50_out_tps.toFixed(0)} vs the PRO 6000's measured
+      ${moe.find(c=>c.host==="tr-pro-6000").cold50_out_tps.toFixed(1)} tok/s) — though that lead only
+      shows up under one of our two estimation methods, not both (see the fine print). A cold agentic
+      turn (50k context, 500-token reply) now beats the DGX ×2 on MoE
+      (${(moe.find(c=>c.host==="m5ultra").cold_by["50000"].total_ms/1000).toFixed(1)}s vs
+      ${(moe.find(c=>c.host==="gx10-top").cold_by["50000"].total_ms/1000).toFixed(1)}s), but dense is
+      still behind (${(dense.find(c=>c.host==="m5ultra").cold_by["50000"].total_ms/1000).toFixed(1)}s
+      vs ${(dense.find(c=>c.host==="gx10-top").cold_by["50000"].total_ms/1000).toFixed(1)}s). $5,499 at
+      96 GB; the 512 GB tier that actually uses its memory edge runs ~$20k+.`) +
+    rec("M5 Ultra or DGX Spark ×2?",
+      `Same rough price bracket. M5 Ultra wins single-user decode on a small MoE model
+      (${moe.find(c=>c.host==="m5ultra").cold50_out_tps.toFixed(0)} vs
+      ${moe.find(c=>c.host==="gx10-top").cold50_out_tps.toFixed(0)} tok/s), but that's specific to
+      small MoE — DeepSeek V4, a much bigger MoE, decodes at ~43 tok/s on the DGX either way, no better
+      than dense. DGX wins prefill on every model, plus concurrency, plus dense sessions. Buy DGX for
+      agents, teams, or dense models; M5 Ultra only if you're one person decoding a small MoE all day.`) +
+    rec("Two things worth knowing",
+      `MoE beats dense everywhere except the RTX PRO 6000 — that card has so much bandwidth the
+      model size stops mattering (1.4–2.1× faster decode, up to 5× faster prefill elsewhere). And
+      Apple's slow caching in this benchmark isn't an MLX ceiling: it re-processed every turn for
+      Qwen but cached fine for DeepSeek V4 on the same machine — a server-config miss, not a hardware
+      limit.`);
+
+  // ---- M5 Ultra methodology fine print (dual-anchor assumptions, spelled out) ----
+  const m5uMoe = moe.find(c=>c.host==="m5ultra"), m5uDense = dense.find(c=>c.host==="m5ultra");
+  const tr6Moe = moe.find(c=>c.host==="tr-pro-6000"), tr6Dense = dense.find(c=>c.host==="tr-pro-6000");
+  const satMoe = m5uMoe.bw_saturation_vs_tr6000, satDense = m5uDense.bw_saturation_vs_tr6000;
+  $("#m5uFinePrint").innerHTML =
+    `<b>M5 Ultra projections.</b> We anchor on two real chips, not one guess. Path A scales `+
+    `M3 Ultra by Apple's official Ultra-vs-Ultra deltas (1.5× bandwidth, "up to 4.5×" compute). `+
+    `Path B scales M5 Max by the physical Max→Ultra die ratio (1.95× bandwidth, 2.0× cores — an `+
+    `actual die count, not a marketing figure). The published number is their geometric mean, `+
+    `capped so that nothing beats the measured M5 Max by more than 2× — an Ultra is two Max dies, `+
+    `so it can't. That cap binds on prefill (Apple's "4.5× compute" would otherwise imply an Ultra `+
+    `ingesting 3.2× faster than the Max it's built from) and not on decode. `+
+    `The paths don't just disagree on magnitude — on MoE decode, Path B has M5 Ultra beating the `+
+    `RTX PRO 6000 (<b>${m5uMoe.proj_paths.decode_path_b.toFixed(0)}</b> vs `+
+    `${tr6Moe.cold50_out_tps.toFixed(1)} tok/s); Path A alone has it losing `+
+    `(<b>${m5uMoe.proj_paths.decode_path_a.toFixed(0)}</b>). To pick a winner we check whether `+
+    `the PRO 6000 is actually bandwidth-saturated: on dense its measured-vs-predicted ratio is `+
+    `${(satDense.saturation_index).toFixed(1)}× — it's bandwidth-bound, so Path A holds and dense `+
+    `stays a loss. On MoE the ratio is <b>${satMoe.saturation_index.toFixed(1)}×</b> what bandwidth `+
+    `alone predicts, meaning the PRO 6000 isn't bandwidth-limited on a model this small — so the `+
+    `cores-based Path B is the one to trust there. Bottom line: M5 Ultra beating the PRO 6000 on `+
+    `MoE decode is our best guess, not a sure thing.`;
+}
+
+/* ---------------- boot ---------------- */
+function rerenderAll(){
+  chartCtxRates(); ctxCallout(); chartWarmup(); chartHeat(); chartBudget();
+  chartConc(); chartPow(); chartVsDgx();
+}
+function init(){
+  makeSeg("#modelSegGlobal", ()=>rerenderAll());
+  verdict();
+  rerenderAll();
+}
+if (typeof Plotly === "undefined") {
+  document.body.insertAdjacentHTML("afterbegin",
+    '<div style="background:#fef2f2;color:#b91c1c;padding:12px 22px;font-size:14px">Plotly did not load — make sure <code>vendor/plotly.min.js</code> sits next to this file (it is vendored locally, no internet needed).</div>');
+}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+# Sample scenario: single Apple-silicon host running MLX / omlx, monitored
+# via macmon-prometheus-exporter. Self-contained and runnable as-is against a
+# server on the same machine (`localhost`) — copy it, rename the host, and
+# point `url` at your actual box for a real remote run.
+#
+# Usage:  uv run llm-bench run --scenario config/scenarios/example-mac.yaml
+
+name: example-mac
+tag: example-mac
+
+max_tokens: 512
+temperature: 0.0
+cold_iters: 1
+warm_sessions: 1
+
+context_lengths: [1000, 10000, 50000, 100000]
+warm_sizes: [10000, 20000, 30000, 40000, 50000]
+
+metrics_interval: 2.0
+metrics_enabled: true
+
+timeout: 900
+read_timeout: 900
+
+hosts:
+  - name: mac-host
+    url: http://localhost:8000
+    model: null                     # auto-discovered from /v1/models when null
+    ssh: null                       # or "user@your-mac-host" to also capture nvidia-smi/lspci-equivalent specs
+    metrics:
+      - type: macmon                # macmon-prometheus-exporter (Apple Silicon)
+        urls:
+          - http://localhost:9090/metrics

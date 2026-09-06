@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local-LLM hardware analysis — charts</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0; background: #f7f7f9; color: #1f2430; }
+  header { background: #111827; color: #fff; padding: 28px 40px; }
+  header h1 { margin: 0 0 6px; font-size: 22px; }
+  header p { margin: 0; color: #c7cbd6; font-size: 14px; max-width: 900px; line-height: 1.5; }
+  main { padding: 24px 40px 60px; max-width: 1400px; margin: 0 auto; }
+  figure { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px;
+           margin: 0 0 28px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  figure img { width: 100%; height: auto; border-radius: 6px; }
+  figcaption { margin-top: 10px; }
+  figcaption .n { font-weight: 700; color: #1d4ed8; }
+  figcaption .t { font-weight: 600; }
+  figcaption .d { color: #4b5563; font-size: 13.5px; margin-top: 3px; line-height: 1.5; }
+  .back { color: #93c5fd; font-size: 13px; text-decoration: none; display: inline-block; margin-top: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Local-LLM hardware: which machine is worth it, and for whom</h1>
+  <p>MoE vs dense · concurrency · context length &amp; caching — measured across 5 machines.
+     Full narrative in <code>analysis/ANALYSIS.md</code>.</p>
+</header>
+<main>
+
+<figure>
+  <img src="01_decode_moe_vs_dense.png" alt="MoE vs dense decode">
+  <figcaption>
+    <span class="n">01</span> · <span class="t">MoE vs dense — single-user decode @50k context</span>
+    <div class="d">MoE wins 1.4–2.1x on Apple silicon, the RTX 5090 and DGX Spark; the two
+      architectures tie on the highest-bandwidth card (RTX PRO 6000).</div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="02_prefill_pp_context.png" alt="Prefill prompt processing vs context">
+  <figcaption>
+    <span class="n">02</span> · <span class="t">Prompt processing throughput vs context length (cold, log-log)</span>
+    <div class="d">PP = prompt tokens / TTFT, so it's fair across context lengths. The RTX PRO 6000 ingests
+      ~5,000–20,000 tok/s vs a few hundred on Apple — a ~20x gap that grows with context.</div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="03_cache_effect.png" alt="Prefix caching effect">
+  <figcaption>
+    <span class="n">03</span> · <span class="t">Prefix caching at ~50k context — warm vs cold prompt processing</span>
+    <div class="d">NVIDIA/vLLM hosts ingest a cached turn at 3–17x the fresh-prompt rate. The Apple MLX
+      stack in these runs re-processed the full context every turn (warm ≈ cold, no gain).</div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="04_concurrency_aggregate.png" alt="Multi-user aggregate throughput">
+  <figcaption>
+    <span class="n">04</span> · <span class="t">Overlap-based aggregate throughput vs concurrent users @10k context</span>
+    <div class="d">Aggregate is measured over the window where all streams decode together.
+      vLLM servers (RTX PRO 6000, DGX Spark) genuinely batch and scale; Apple/MLX and the RTX 5090
+      serialize (ov 0%). DeepSeek included as a larger-MoE reference.</div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="05_per_user_qos.png" alt="Per-user latency under concurrency">
+  <figcaption>
+    <span class="n">05</span> · <span class="t">Per-stream latency vs concurrent users @10k context</span>
+    <div class="d">Dense on Apple under 6 users reaches ~2 minutes per stream; DeepSeek on a Mac
+      ~3 minutes; MoE cuts Apple to ~30s, and the NVIDIA hosts stay under ~40s.</div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="06_efficiency.png" alt="Tokens per watt">
+  <figcaption>
+    <span class="n">06</span> · <span class="t">Generation efficiency (tokens/s per watt) @50k context</span>
+    <div class="d">The DGX Spark leads efficiency (0.82 tok/s/W); MoE roughly doubles efficiency
+      on every host. Bar labels show average power draw.</div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="07_verdict_map.png" alt="Hardware verdict map">
+  <figcaption>
+    <span class="n">07</span> · <span class="t">Hardware positioning: speed vs concurrency scaling</span>
+    <div class="d">RTX PRO 6000 is the only box that is both fast and scales (top-right) — the
+      multi-user choice (dense: 286 tok/s at 6 users). DGX Spark scales 3x but is mid-speed;
+      RTX 5090 is fast alone but serializes; Apple is efficient but single-user only. DeepSeek
+      marked with diamonds.</div>
+  </figcaption>
+</figure>
+
+<p><a class="back" href="../ANALYSIS.md">→ read the full narrative (ANALYSIS.md)</a></p>
+</main>
+</body>
+</html>

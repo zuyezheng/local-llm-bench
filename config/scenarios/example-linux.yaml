@@ -1,0 +1,36 @@
+# Sample scenario: single Linux host with an NVIDIA GPU running vLLM,
+# monitored via dcgm-exporter. Self-contained and runnable as-is against a
+# server on the same machine (`localhost`) — copy it, rename the host, and
+# point `url` at your actual box for a real remote run.
+#
+# Usage:  uv run llm-bench run --scenario config/scenarios/example-linux.yaml
+
+name: example-linux
+tag: example-linux
+
+max_tokens: 512
+temperature: 0.0
+cold_iters: 1
+warm_sessions: 1
+
+context_lengths: [1000, 10000, 50000, 100000]
+warm_sizes: [10000, 20000, 30000, 40000, 50000]
+
+metrics_interval: 2.0
+metrics_enabled: true
+
+timeout: 900
+read_timeout: 900
+
+hosts:
+  - name: gpu-host
+    url: http://localhost:8000
+    model: null                     # auto-discovered from /v1/models when null
+    ssh: null                       # or "user@your-gpu-host" to also capture nvidia-smi/lspci specs
+    metrics:
+      - type: dcgm                  # dcgm-exporter
+        urls:
+          - http://localhost:9400/metrics
+        # On a mixed-GPU host, restrict collection to one device model (the
+        # exporter's `modelName` label):
+        # gpu_model: "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"

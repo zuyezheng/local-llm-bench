@@ -1,0 +1,23 @@
+scenario,run_id,host,model,status,samples_total,samples_ok,phases,started
+deepseekv4,20260830-104146-gx10-top-deepseekv4,gx10-top,deepseek-ai/DeepSeek-V4-Flash-0731,ok,120,120,cold=6 mucold=36 muwarm=72 warm=6,2026-08-30T17:41:46
+deepseekv4,20260830-104146-macstudio-deepseekv4,macstudio,DeepSeek-V4-Flash-4bit,ok,120,120,cold=6 mucold=36 muwarm=72 warm=6,2026-08-30T17:41:46
+qwen3.6-dflash,20260831-090417-m5-max-qwen3.6-dflash,m5-max,Qwen3.6-35B-A3B-MLX-8bit,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-08-31T16:04:17
+qwen3.6-dflash,20260831-090417-tr-pro-6000-qwen3.6-dflash,tr-pro-6000,Qwen/Qwen3.6-35B-A3B-FP8,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-08-31T16:04:17
+qwen3.6-dflash,20260831-090417-tr-pro-5090-qwen3.6-dflash,tr-pro-5090,nvidia/Qwen3.6-35B-A3B-NVFP4,ok,130,130,cold=4 mucold=48 muwarm=72 warm=6,2026-08-31T16:04:17
+qwen3.6-dflash,20260831-090417-gx10-top-qwen3.6-dflash,gx10-top,qwen3.6-35b-1m,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-08-31T16:04:17
+qwen3.6-dflash,20260831-090417-macstudio-qwen3.6-dflash,macstudio,Qwen3.6-35B-A3B-MLX-8bit,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-08-31T16:04:17
+qwen3.6-dflash,20260831-213650-tr-pro-5090-qwen3.6-dflash,tr-pro-5090,nvidia/Qwen3.6-35B-A3B-NVFP4,ok,130,130,cold=4 mucold=48 muwarm=72 warm=6,2026-09-01T04:36:50
+qwen3.6-dflash,20260831-213650-tr-pro-6000-qwen3.6-dflash,tr-pro-6000,Qwen/Qwen3.6-35B-A3B-FP8,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-09-01T04:36:50
+qwen3.6-dflash,20260831-213650-m5-max-qwen3.6-dflash,m5-max,Qwen3.6-35B-A3B-MLX-8bit,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-09-01T04:36:50
+qwen3.6-dflash,20260831-213650-macstudio-qwen3.6-dflash,macstudio,Qwen3.6-35B-A3B-MLX-8bit,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-09-01T04:36:50
+qwen3.6-dflash,20260831-213650-gx10-top-qwen3.6-dflash,gx10-top,qwen3.6-35b-1m,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-09-01T04:36:50
+qwen3.8-dflash,20260830-200421-m5-max-qwen3.8-dflash,m5-max,Qwen3.8-27B-MLX-4bit,running,7,7,cold=5 warm=2,2026-08-31T03:04:22
+qwen3.8-dflash,20260830-200421-macstudio-qwen3.8-dflash,macstudio,Qwen3.8-27B-MLX-4bit,running,4,4,cold=4,2026-08-31T03:04:22
+qwen3.8-dflash,20260830-200421-gx10-top-qwen3.8-dflash,gx10-top,unsloth/Qwen3.8-27B-NVFP4,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-08-31T03:04:22
+qwen3.8-dflash,20260830-200421-tr-pro-5090-qwen3.8-dflash,tr-pro-5090,unsloth/Qwen3.8-27B-NVFP4,ok,130,130,cold=4 mucold=48 muwarm=72 warm=6,2026-08-31T03:04:22
+qwen3.8-dflash,20260830-200421-tr-pro-6000-qwen3.8-dflash,tr-pro-6000,unsloth/Qwen3.8-27B-NVFP4,partial,131,59,cold=5 mucold=48 warm=6,2026-08-31T03:04:22
+qwen3.8-dflash,20260830-204747-m5-max-qwen3.8-dflash,m5-max,Qwen3.8-27B-MLX-4bit,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-08-31T03:47:47
+qwen3.8-dflash,20260830-204747-tr-pro-5090-qwen3.8-dflash,tr-pro-5090,unsloth/Qwen3.8-27B-NVFP4,ok,130,130,cold=4 mucold=48 muwarm=72 warm=6,2026-08-31T03:47:47
+qwen3.8-dflash,20260830-204747-macstudio-qwen3.8-dflash,macstudio,Qwen3.8-27B-MLX-4bit,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-08-31T03:47:47
+qwen3.8-dflash,20260830-204747-tr-pro-6000-qwen3.8-dflash,tr-pro-6000,unsloth/Qwen3.8-27B-NVFP4,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-08-31T03:47:47
+qwen3.8-dflash,20260830-204747-gx10-top-qwen3.8-dflash,gx10-top,unsloth/Qwen3.8-27B-NVFP4,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-08-31T03:47:47

@@ -1,0 +1,66 @@
+# Scenario: deepseekv4
+# DeepSeek V4 Flash benchmarked across an Apple-silicon host (MLX) and an
+# NVIDIA DGX-class cluster (vLLM).
+# Machine configs (hosts + clusters + exporters) are part of the scenario so each
+# (model, machines, workload) combo is one self-contained run file. Real host
+# URLs live in a local, gitignored override (see README.md "Config" section, or
+# config/scenarios/example-mac.yaml / example-linux.yaml for the shape) —
+# this file intentionally ships without a `hosts:` block.
+#
+# Usage:  uv run llm-bench run --scenario config/scenarios/deepseekv4.yaml \
+#           --config config/local/deepseekv4.hosts.yaml
+
+name: deepseekv4
+tag: deepseekv4
+
+max_tokens: 512
+temperature: 0.0
+cold_iters: 1
+warm_sessions: 1
+
+# Concurrency is covered by the multi-user phase below (distinct context per
+# user), so the fixed 1-6 concurrency sweep is skipped automatically.
+
+# ------------------------------- single user -------------------------------
+# Cold cache: (1k, 10k, 50k, 100k, 200k, 400k), 1k-token output
+context_lengths: [1000, 10000, 50000, 100000, 200000, 400000]
+# Warm cache: coding session, +2k context per step
+warm_sizes: [40000, 42000, 44000, 46000, 48000, 50000]
+
+# ------------------------------ multi user ---------------------------------
+# 2 / 4 / 8 users. Each user gets a DIFFERENT context slice (never shared).
+# Cold cache: (1k, 10k, 50k, 100k) per user, 1k-token output
+multi_users: [2, 4, 6]
+multi_user_contexts: [1000, 10000, 50000]
+# Warm cache: per-user coding session, +2k context per step
+multi_user_warm_sizes: [40000, 42000, 44000, 46000, 48000, 50000]
+multi_user_batches: 1
+
+# -------------------------------- machines ---------------------------------
+metrics_interval: 2.0
+metrics_enabled: true
+
+# client timeouts (seconds). read_timeout is the max silence before a request is
+# aborted client-side and retried once; timeout is the hard total per request.
+# The per-request budget also scales read_timeout by prompt size (min_pp_tps).
+timeout: 900
+read_timeout: 900
+
+# -------------------------------- hosts -------------------------------------
+# No `hosts:` key here on purpose — real machine URLs are environment-specific
+# and stay out of the public repo. Provide them via a local override layered
+# in with --config, e.g. config/local/deepseekv4.hosts.yaml:
+#
+# hosts:
+#   - name: macstudio
+#     url: http://<mac-host>:8000
+#     model: DeepSeek-V4-Flash-4bit   # MLX / omlx
+#     metrics:
+#       - type: macmon
+#         urls: [http://<mac-host>:9090/metrics]
+#   - name: gx10-top
+#     url: http://<linux-host>:8000
+#     model: deepseek-ai/DeepSeek-V4-Flash-0731   # vLLM
+#     metrics:
+#       - type: dcgm
+#         urls: [http://<linux-host>:9400/metrics]
