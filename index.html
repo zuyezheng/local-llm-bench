@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Local LLM hardware, measured — context length, caching & concurrency</title>
+<title>Local LLM Bench</title>
 <script src="vendor/plotly.min.js"></script>
 <style>
   :root{
@@ -92,8 +92,7 @@
 
 <header>
   <div class="wrap">
-    <div class="kicker">Local LLM hardware, measured · a simulated engineering session</div>
-    <h1>Local LLM hardware, measured.</h1>
+    <h1>Local LLM Bench</h1>
   </div>
 </header>
 
@@ -118,7 +117,7 @@
     <h2>1 · Context Length</h2>
     <p class="sub">
       Cold cache, a fresh prompt each request, context growing <b>1k &rarr; 200k</b> (400k for
-      DeepSeek) — the big picture, not a coding-only lens. The two rates that matter per context:
+      DeepSeek V4) — the big picture, not a coding-only lens. The two rates that matter per context:
       <b>prefill</b> (prompt processing tok/s) and <b>generation</b> (decode tok/s). Prefill is
       where devices diverge most — and it's what dominates real coding/agentic turns (big context,
       small reply).
@@ -150,7 +149,7 @@
 
   <!-- ============================ 3. TIME BUDGET (COLD) ============================ -->
   <section id="budget">
-    <h2>3 · Where does your time actually go?</h2>
+    <h2>3 · Time spent</h2>
     <p class="sub">
       Single user, <b>cold cache</b>, across the full context spread (1k&rarr;200k). Each bar is one
       device's request, split into <b>prefill</b> (reading the prompt, gray) and <b>generation</b>
@@ -183,13 +182,10 @@
   <section id="power">
     <h2>5 · Power &amp; efficiency</h2>
     <p class="sub">
-      Tokens per watt for <b>prompt processing (PP)</b> and <b>generation (TG)</b>, for
-      <b>single-user @50k</b> and <b>6 concurrent streams</b> at the largest measured multi-user
-      context (30k for the Qwen models — no 50k concurrent run — 50k for DeepSeek). All NVIDIA
-      hosts are adjusted for whole-box draw: DGX Spark ×2 <b>+70W/node (+140W)</b>, RTX 5090 and
-      RTX PRO 6000 <b>+100W each</b> (their exporters only read GPU power). Every power reading
-      drops the <b>first poll in the window</b> (ramp-up). M5 Ultra is a projection and has no
-      measured power.
+      Tokens per watt for <b>prompt processing (PP)</b> and <b>generation (TG)</b>, broken into
+      <b>single-user</b> vs <b>6 concurrent streams</b> (all at 10k context). The DGX Spark ×2 is
+      adjusted <b>+70W per node</b> — its exporter only reads GPU power, so this is the whole-box
+      estimate. M5 Ultra is a projection and has no measured power.
     </p>
     <div class="card"><div class="grid4">
       <div><div id="pow1" class="chart" style="height:260px"></div></div>
@@ -203,7 +199,7 @@
 
   <!-- ============================ 6. VERDICT ============================ -->
   <section id="verdict">
-    <h2>6 · So, what should you actually buy?</h2>
+    <h2>6 · What should you actually buy?</h2>
     <p class="sub">
       The "which hardware" answer, in the units you actually care about: minutes of your day, per
       machine, per model. Then the $5&ndash;8k decision: M5 Ultra or DGX Spark ×2, side by side.
@@ -212,7 +208,7 @@
 
     <!-- ======== merged: M5 Ultra vs DGX Spark ×2 ======== -->
     <div id="vsdgx" style="margin-top:34px">
-      <h3>M5 Ultra or DGX Spark ×2 — the smarter buy?</h3>
+      <h3>M5 Ultra or DGX Spark ×2</h3>
       <p class="sub">
         <b>DGX Spark ×2</b> is the <b>measured</b> 2-node cluster (~$8k); <b>M5 Ultra</b> is the
         projected Mac Studio (1.2 TB/s, 80-core GPU — $5,499 @ 96 GB, ~$12k @ 256 GB,
@@ -255,13 +251,27 @@
         <b>Caveats.</b> No think-time between turns, so this is the best case for a session.
         Single runs, so individual cells will wobble. Apple's prefix caching is a config thing,
         not a hardware limit — Qwen3.6/Qwen3.8 on MLX re-processed every turn here
-        (warm&nbsp;&asymp;&nbsp;cold), but DeepSeek on the same Mac did cache (2.6x speedup), so
+        (warm&nbsp;&asymp;&nbsp;cold), but DeepSeek V4 on the same Mac did cache (2.6x speedup), so
         bigger models get more out of it. Power/efficiency figures use the 50k runs since they're
         long enough to sample cleanly. <b>Qwen3.6/Qwen3.8 single-user numbers are run-averaged</b>
         across each machine's complete runs (smooths noisy decode); concurrent batches stay on the
-        latest run since streams can't be aligned across runs. Per-sample power drops the first
-        reading in its window (system ramp-up). Run selection, concurrency math, and
+        latest run since streams can't be aligned across runs. Run selection, concurrency math, and
         repro scripts live in <code>analysis/</code>.
+      </p>
+      <p>
+        <b>Model quants.</b> Every model ran at the <b>largest quantization that fits</b> its
+        machine, and we standardized the format across machines wherever it fits. The Apple
+        Macs (M5 Max, M3 Ultra) ran <b>MLX</b> quantized weights: <b>8-bit</b> for the
+        Qwen3.6-35B-A3B MoE, <b>4-bit</b> for the Qwen3.8-27B dense and for DeepSeek-V4-Flash.
+        The NVIDIA Blackwell boxes (vLLM) ran <b>NVFP4</b> — NVIDIA's 4-bit float, W4A4,
+        E2M1 values with an FP8 scale per 16-value block — for the dense 27B on all three, and
+        for the 35B MoE on the 32&nbsp;GB RTX&nbsp;5090; where memory allows (DGX Spark ×2,
+        RTX PRO 6000) the MoE ran at higher fidelity <b>FP8</b> (8-bit float). DeepSeek-V4-Flash
+        on the DGX used the <b>official release checkpoint</b>, which already ships quantized at
+        the source — MXFP4 4-bit routed experts with FP8 elsewhere (284B total, 13B active) — and
+        the Mac served a matching 4-bit MLX conversion. Quantization level is thus comparable
+        within a hardware family, but not bit-identical across them; read the absolute rates
+        with that in mind.
       </p>
       <p id="m5uFinePrint"></p>
     </div>
@@ -404,7 +414,7 @@ function chartWarmup(){
 function chartBudget(){
   const hosts=HOSTS.map(h=>cohort(h,MODEL)).filter(c=>c&&c.cold_by);
   if(!hosts.length) return;
-  // contexts available for this model (DeepSeek also has 400k), ascending
+  // contexts available for this model (DeepSeek V4 also has 400k), ascending
   const ctxs=Object.keys(hosts[0].cold_by).map(Number).sort((a,b)=>a-b);
   const grid=$("#budGrid");
   grid.innerHTML=ctxs.map((c,i)=>`<div class="budpanel"><div id="bud${i}" class="chart" style="height:300px"></div></div>`).join("");
@@ -531,25 +541,22 @@ function chartVsDgx(){
 
 /* ---------------- chart 5b: power & efficiency ---------------- */
 function chartPow(){
-  // efficiency per host: single-user @50k (cold), 6-concurrent @ the largest
-  // measured multi-user context (30k for Qwen, 50k for DeepSeek)
+  // efficiency per host at 10k context: single (cold) and 6-concurrent (mucold)
   const hosts=HOSTS.map(h=>cohort(h,MODEL)).filter(c=>{
-    const cb=c&&c.cold_by&&c.cold_by[50000], cn=c&&c.conc_power&&c.conc_power[6];
+    const cb=c&&c.cold_by&&c.cold_by[10000], cn=c&&c.conc&&c.conc[6];
     return cb&&cb.power_w!=null&&cn&&cn.power_w!=null&&cb.pp!=null&&cn.pp!=null;
   });
   if(!hosts.length){ $("#powLegend").innerHTML=""; return; }
-  const cctx=hosts[0].conc_power.ctx||"";
-  const cctxk=cctx? (cctx/1000)+"k":"?";
   const eff=c=>{
-    const cb=c.cold_by[50000], cn=c.conc_power[6];
+    const cb=c.cold_by[10000], cn=c.conc[6];
     return {spPP:cb.pp/cb.power_w, spTG:cb.tg/cb.power_w,
             c6PP:cn.pp/cn.power_w, c6TG:cn.tg/cn.power_w};
   };
   const panels=[
-    {id:"pow1",key:"spPP",t:"PP tok/s per W — single @50k",note:"higher is better"},
-    {id:"pow2",key:"spTG",t:"TG tok/s per W — single @50k",note:"higher is better"},
-    {id:"pow3",key:"c6PP",t:"PP tok/s per W — 6 concurrent @"+cctxk,note:"higher is better"},
-    {id:"pow4",key:"c6TG",t:"TG tok/s per W — 6 concurrent @"+cctxk,note:"higher is better"},
+    {id:"pow1",key:"spPP",t:"PP tok/s per W — single user",note:"higher is better"},
+    {id:"pow2",key:"spTG",t:"TG tok/s per W — single user",note:"higher is better"},
+    {id:"pow3",key:"c6PP",t:"PP tok/s per W — 6 concurrent",note:"higher is better"},
+    {id:"pow4",key:"c6TG",t:"TG tok/s per W — 6 concurrent",note:"higher is better"},
   ];
   panels.forEach(p=>{
     const rows=hosts.slice().sort((a,b)=> (eff(b)[p.key]||0)-(eff(a)[p.key]||0));
@@ -608,14 +615,14 @@ function verdict(){
       `Same rough price bracket. M5 Ultra wins single-user decode on a small MoE model
       (${moe.find(c=>c.host==="m5ultra").cold50_out_tps.toFixed(0)} vs
       ${moe.find(c=>c.host==="gx10-top").cold50_out_tps.toFixed(0)} tok/s), but that's specific to
-      small MoE — DeepSeek, a much bigger MoE, decodes at ~43 tok/s on the DGX either way, no better
+      small MoE — DeepSeek V4, a much bigger MoE, decodes at ~43 tok/s on the DGX either way, no better
       than dense. DGX wins prefill on every model, plus concurrency, plus dense sessions. Buy DGX for
       agents, teams, or dense models; M5 Ultra only if you're one person decoding a small MoE all day.`) +
     rec("Two things worth knowing",
       `MoE beats dense everywhere except the RTX PRO 6000 — that card has so much bandwidth the
       model size stops mattering (1.4–2.1× faster decode, up to 5× faster prefill elsewhere). And
       Apple's slow caching in this benchmark isn't an MLX ceiling: it re-processed every turn for
-      Qwen but cached fine for DeepSeek on the same machine — a server-config miss, not a hardware
+      Qwen but cached fine for DeepSeek V4 on the same machine — a server-config miss, not a hardware
       limit.`);
 
   // ---- M5 Ultra methodology fine print (dual-anchor assumptions, spelled out) ----
