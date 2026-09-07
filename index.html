@@ -74,7 +74,9 @@
   tbody tr:hover{background:#f3f6fb}
   .num{font-variant-numeric:tabular-nums}
   /* verdict */
-  .recs{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+  .recs{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media(max-width:980px){ .recs{grid-template-columns:repeat(2,1fr)} }
+  @media(max-width:640px){ .recs{grid-template-columns:1fr} }
   .rec{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;padding:16px 18px}
   .rec .h{font-weight:800;font-size:15px;margin-bottom:6px}
   .rec p{margin:0;font-size:13.5px;color:#3c4451}
@@ -84,6 +86,8 @@
   footer h4{color:var(--ink);margin:22px 0 6px}
   code{background:#eef1f6;padding:1px 5px;border-radius:5px;font-size:12.5px}
   .bignum{font-size:22px;font-weight:800}
+  ul.fineprint-list{margin:10px 0 14px;padding-left:20px}
+  ul.fineprint-list li{margin:6px 0}
   .pill-warn{background:#fef3c7;border:1px solid #fde68a}
   @media(max-width:720px){ .stats{grid-template-columns:1fr 1fr} }
 </style>
@@ -127,7 +131,6 @@
       <div><div id="ctx2" class="chart" style="height:360px"></div></div>
     </div>
     <div id="ctxLegend" class="conc-legend"></div>
-    <div id="modelCoverage" class="hint" style="margin-top:10px"></div>
     </div>
     <div class="callout" id="ctxCallout"></div>
   </section>
@@ -252,41 +255,34 @@
         the concurrent batch's wall span per warm step.
       </p>
       <p>
-        <b>Caveats.</b> No think-time between turns, so these are best-case sessions, and single
-        runs wobble cell to cell. Apple's prefix caching is a config choice, not a hardware limit:
-        Qwen3.6/Qwen3.8 on MLX re-processed every turn here (warm&nbsp;&asymp;&nbsp;cold), while
-        DeepSeek V4 on the same Mac cached fine (2.6x faster). Power figures use the 50k runs —
-        long enough to sample cleanly. <b>Short-request power is dropped, not smoothed:</b> when a
-        request window reads at the run's idle floor while the box was clearly busy (the dcgm
-        exporter does this for the first ~10&nbsp;s of a run — 18&nbsp;W at 0% util on an RTX PRO
-        6000 streaming 148&nbsp;tok/s), we call that sample unmeasured, so a few boxes are missing
-        from section&nbsp;5 rather than plotted at an impossible tok/s per watt.
-        <b>Qwen3.6/Qwen3.8 single-user numbers are averaged across each machine's complete
-        runs</b> to smooth noisy decode; concurrent batches use the latest run only, since streams
-        can't be aligned across runs. Run selection, concurrency math, and repro scripts live in
-        <code>analysis/</code>.
+        <b>Caveats.</b> No think-time between turns, so every session number is a best case, and
+        single runs mean individual cells wobble. <b>Prefix caching is a server config choice, not
+        a hardware limit</b> — MLX re-processed every turn for Qwen3.6/Qwen3.8
+        (warm&nbsp;&asymp;&nbsp;cold), while DeepSeek V4 on the same Mac cached fine and ran 2.6x
+        faster. Qwen3.6/Qwen3.8 single-user numbers are averaged across each machine's runs;
+        concurrent batches use the latest run only.
       </p>
       <p>
-        <b>Model quants.</b> Every model ran at the <b>largest quantization its machine could
-        hold</b>, in the same format across machines wherever that fit. The Macs (M5 Max, M3 Ultra)
-        ran <b>MLX</b>: <b>8-bit</b> for the Qwen3.6-35B-A3B MoE, <b>4-bit</b> for the Qwen3.8-27B
-        dense and DeepSeek-V4-Flash. The NVIDIA Blackwell boxes (vLLM) ran <b>NVFP4</b> — NVIDIA's
-        4-bit float, W4A4, E2M1 values with an FP8 scale per 16 values — for the dense 27B
-        everywhere and for the 35B MoE on the 32&nbsp;GB RTX&nbsp;5090; where memory allowed
-        (DGX Spark ×2, RTX PRO 6000) the MoE ran at <b>FP8</b> instead. DeepSeek-V4-Flash on the
-        DGX used the <b>official release checkpoint</b>, already quantized at the source (MXFP4
-        4-bit routed experts, FP8 elsewhere; 284B total, 13B active), with a matching 4-bit MLX
-        conversion on the Mac. <b>Qwen3.8 Next</b> is the odd one out — <b>GGUF Q8_0</b> on
-        llama.cpp/Unsloth Studio (M3 Ultra), <b>NVFP4</b> on vLLM (RTX PRO 6000), an unnamed quant
-        on <b>sglang</b> (DGX) — so its Mac row is an 8-bit llama.cpp number sitting next to 4-bit
-        MLX ones: model <i>and</i> backend change together. Quants are comparable within a hardware
-        family, not bit-identical across them; read the absolute rates with that in mind.
+        <b>Model quants.</b> Every model ran at the biggest quantization its machine could hold,
+        in the same format everywhere it fit. Macs ran MLX, NVIDIA boxes ran NVFP4 (NVIDIA's 4-bit
+        float) or FP8.
       </p>
-      <p id="m5uFinePrint"></p>
+      <ul class="fineprint-list">
+        <li><b>Qwen3.6-35B-A3B (MoE) — 8-bit.</b> MLX on the Macs, FP8 on the NVIDIA boxes. The
+          exception is the 32&nbsp;GB RTX&nbsp;5090, where 8-bit doesn't fit, so it ran NVFP4.</li>
+        <li><b>Qwen3.8-27B (dense) — 4-bit.</b> MLX on the Macs, NVFP4 on the NVIDIA boxes.</li>
+        <li><b>DeepSeek-V4-Flash — 4-bit.</b> An MLX conversion on the Mac, the official 4-bit
+          checkpoint on the DGX.</li>
+        <li><b>Qwen3.8 Next — mixed.</b> 8-bit GGUF on the Mac (llama.cpp, not MLX), NVFP4 on the
+          NVIDIA boxes.</li>
+      </ul>
+      <div id="m5uFinePrint"></div>
     </div>
     <footer>
       <h4>Reproduce</h4>
-      <p><code>uv run python analysis/site_data.py</code> regenerates <code>analysis/site/data.js</code>
+      <p>Raw results, analysis, and the scripts behind every number:
+      <a href="https://github.com/zuyezheng/local-llm-bench">github.com/zuyezheng/local-llm-bench</a>.
+      <code>uv run python analysis/site_data.py</code> regenerates <code>analysis/site/data.js</code>
       from the raw <code>results/</code> directories; open this page to render the charts.</p>
     </footer>
   </section>
@@ -343,26 +339,6 @@ function makeSeg(id, onChange){
 }
 
 /* ---------------- which machines ran the selected model ---------------- */
-function coverageLine(){
-  const cs=HOSTS.map(h=>cohort(h,MODEL)).filter(c=>c&&!isProj(c.host));
-  if(!cs.length) return;
-  const nAll=HOSTS.filter(h=>!isProj(h)).length;
-  const proj=HOSTS.some(h=>isProj(h)&&cohort(h,MODEL));
-  const serv=cs.map(c=>{
-    const s=c.serving;
-    if(!s) return `<b>${c.host_display}</b>: —`;
-    const bits=[s.server, s.model, s.quant];
-    if(s.max_model_len) bits.push(Number(s.max_model_len).toLocaleString()+" ctx cap");
-    return `<b>${c.host_display}</b>: ${bits.filter(Boolean).join(" · ")}`;
-  }).join(" &nbsp;|&nbsp; ");
-  $("#modelCoverage").innerHTML =
-    `<b>${firstCohort(MODEL).model_label}</b> ran on <b>${cs.length} of ${nAll} machines</b>`+
-    (cs.length<nAll? ` — the others were not part of this scenario, so its bars are thinner, not absent by failure`:"")+
-    (proj? "; the "+hostLabel("m5ultra")+" series is a projection, not a measurement":"")+".<br>"+
-    "Serving stacks (server · weights · context cap — they are <i>not</i> identical across machines, so "+
-    "read a cross-machine model row as model + backend together): "+serv;
-}
-
 /* ---------------- chart 1: context length — prefill & generation rates ---------------- */
 function modelCtxs(){
   const c=HOSTS.map(h=>cohort(h,MODEL)).find(c=>c&&c.cold_by);
@@ -659,69 +635,67 @@ function verdict(){
   const rec=(h,txt)=>`<div class="rec"><div class="h">${h}</div><p>${txt}</p></div>`;
   $("#recs").innerHTML=
     rec("RTX PRO 6000",
-      `Fastest sessions, and the only card here that doesn't fall over with a team: a 6-turn session
-      takes <b>${fmtDur(moe.find(c=>c.host==="tr-pro-6000").session_s)}</b> (MoE) /
-      ${fmtDur(dense.find(c=>c.host==="tr-pro-6000").session_s)} (dense), and 6 engineers hitting it
-      at once still finish in ~${Math.round(t6.find(c=>c.host==="tr-pro-6000").team[6]/60*10)/10} min.
-      If more than one person needs it, this is the buy.`)+
+      `Fastest sessions here, and the only card that holds up with a team. A 6-turn session takes
+      <b>${fmtDur(moe.find(c=>c.host==="tr-pro-6000").session_s)}</b> (MoE) /
+      ${fmtDur(dense.find(c=>c.host==="tr-pro-6000").session_s)} (dense), and 6 people at once still
+      finish in ~${Math.round(t6.find(c=>c.host==="tr-pro-6000").team[6]/60*10)/10} min. If more than
+      one person shares it, buy this.`)+
     rec("DGX Spark ×2",
-      `Session ${fmtDur(moe.find(c=>c.host==="gx10-top").session_s)}, caches to a
-      ${(moe.find(c=>c.host==="gx10-top").speedup).toFixed(1)}× speedup, and does it at ~80–110 W.
-      The efficient choice for a small team that doesn't need PRO 6000 money.`) +
+      `Session ${fmtDur(moe.find(c=>c.host==="gx10-top").session_s)} at ~80–110 W, with caching worth
+      a ${(moe.find(c=>c.host==="gx10-top").speedup).toFixed(1)}× speedup. The efficient pick for a
+      small team that can't spend PRO 6000 money.`) +
     rec("RTX 5090",
-      `Session ${fmtDur(moe.find(c=>c.host==="tr-pro-5090").session_s)} — nearly PRO-6000 speed for
-      about a quarter of the price. The catch: it queues every extra user instead of batching them
-      (0% overlap). Fine if you're the only one using it, bad for teams.`) +
+      `Session ${fmtDur(moe.find(c=>c.host==="tr-pro-5090").session_s)} — near PRO 6000 speed at about
+      a quarter of the price. But it queues extra users instead of batching them (0% overlap). Great
+      alone, bad shared.`) +
     rec("Mac Studio / MacBook (M3 Ultra, M5 Max)",
-      `Only makes sense with a MoE model: session ${fmtDur(moe.find(c=>c.host==="m5-max").session_s)}
-      / ${fmtDur(moe.find(c=>c.host==="macstudio").session_s)} once prefix caching actually works.
-      Dense 27B is still slow — ${fmtDur(dense.find(c=>c.host==="macstudio").session_s)} — because
-      the first turn's prefill eats the whole budget and later turns can't make it back.`) +
+      `Worth it with a MoE model: ${fmtDur(moe.find(c=>c.host==="m5-max").session_s)} /
+      ${fmtDur(moe.find(c=>c.host==="macstudio").session_s)} per session when prefix caching is on.
+      Dense 27B takes ${fmtDur(dense.find(c=>c.host==="macstudio").session_s)} — the first turn's
+      prefill eats the budget and later turns never catch up.`) +
     rec("M5 Ultra — not out yet, this is a projection",
-      `On a small MoE model it should out-decode everything else here
-      (~${moe.find(c=>c.host==="m5ultra").cold50_out_tps.toFixed(0)} vs the PRO 6000's measured
-      ${moe.find(c=>c.host==="tr-pro-6000").cold50_out_tps.toFixed(1)} tok/s) — though that lead only
-      shows up under one of our two estimation methods, not both (see the fine print). A cold agentic
-      turn (50k context, 500-token reply) now beats the DGX ×2 on MoE
-      (${(moe.find(c=>c.host==="m5ultra").cold_by["50000"].total_ms/1000).toFixed(1)}s vs
-      ${(moe.find(c=>c.host==="gx10-top").cold_by["50000"].total_ms/1000).toFixed(1)}s), but dense is
+      `On a small MoE it lands at
+      ~${moe.find(c=>c.host==="m5ultra").cold50_out_tps.toFixed(0)} tok/s decode, level with the PRO
+      6000's measured ${moe.find(c=>c.host==="tr-pro-6000").cold50_out_tps.toFixed(1)} — only the
+      higher of our two estimates puts it ahead (see the fine print). A cold 50k-context turn beats
+      the DGX ×2 on MoE (${(moe.find(c=>c.host==="m5ultra").cold_by["50000"].total_ms/1000).toFixed(1)}s
+      vs ${(moe.find(c=>c.host==="gx10-top").cold_by["50000"].total_ms/1000).toFixed(1)}s); dense is
       still behind (${(dense.find(c=>c.host==="m5ultra").cold_by["50000"].total_ms/1000).toFixed(1)}s
       vs ${(dense.find(c=>c.host==="gx10-top").cold_by["50000"].total_ms/1000).toFixed(1)}s). $5,499 at
-      96 GB; the 512 GB tier that actually uses its memory edge runs ~$20k+.`) +
+      96 GB, ~$20k+ for the 512 GB tier where its memory edge matters.`) +
     rec("M5 Ultra or DGX Spark ×2?",
-      `Same rough price bracket. M5 Ultra wins single-user decode on a small MoE model
+      `Same price bracket. M5 Ultra decodes a small MoE much faster for one user
       (${moe.find(c=>c.host==="m5ultra").cold50_out_tps.toFixed(0)} vs
-      ${moe.find(c=>c.host==="gx10-top").cold50_out_tps.toFixed(0)} tok/s), but that's specific to
-      small MoE — DeepSeek V4, a much bigger MoE, decodes at ~43 tok/s on the DGX either way, no better
-      than dense. DGX wins prefill on every model, plus concurrency, plus dense sessions. Buy DGX for
-      agents, teams, or dense models; M5 Ultra only if you're one person decoding a small MoE all day.`) ;
+      ${moe.find(c=>c.host==="gx10-top").cold50_out_tps.toFixed(0)} tok/s), but only that case —
+      DeepSeek V4, a bigger MoE, runs ~43 tok/s on the DGX, no better than dense. DGX wins prefill on
+      every model, concurrency, and dense sessions. Buy DGX for agents, teams, or dense models;
+      M5 Ultra only if you're one person on a small MoE all day.`) ;
 
   // ---- M5 Ultra methodology fine print (dual-anchor assumptions, spelled out) ----
   const m5uMoe = moe.find(c=>c.host==="m5ultra"), m5uDense = dense.find(c=>c.host==="m5ultra");
   const tr6Moe = moe.find(c=>c.host==="tr-pro-6000"), tr6Dense = dense.find(c=>c.host==="tr-pro-6000");
-  const satMoe = m5uMoe.bw_saturation_vs_tr6000, satDense = m5uDense.bw_saturation_vs_tr6000;
   $("#m5uFinePrint").innerHTML =
-    `<b>M5 Ultra projections.</b> Two anchors, not one guess. Path A scales M3 Ultra by Apple's `+
-    `official Ultra-to-Ultra deltas (1.5× bandwidth, "up to 4.5×" compute). Path B scales M5 Max `+
-    `by the physical Max→Ultra die ratio (1.95× bandwidth, 2.0× cores — a die count, not a `+
-    `marketing figure). We publish their geometric mean, capped at 2× the measured M5 Max: an `+
-    `Ultra is two Max dies, so it can't do better. The cap binds on prefill (that "4.5× compute" `+
-    `would otherwise imply an Ultra ingesting 3.2× faster than the Max it's built from), not on `+
-    `decode. The paths disagree about more than magnitude — on MoE decode Path B has M5 Ultra `+
-    `beating the RTX PRO 6000 (<b>${m5uMoe.proj_paths.decode_path_b.toFixed(0)}</b> vs `+
-    `${tr6Moe.cold50_out_tps.toFixed(1)} tok/s), Path A has it losing `+
-    `(<b>${m5uMoe.proj_paths.decode_path_a.toFixed(0)}</b>). The tie-breaker is whether the PRO `+
-    `6000 is actually bandwidth-saturated. On dense, measured-vs-predicted is `+
-    `${(satDense.saturation_index).toFixed(1)}× — bandwidth-bound, so Path A holds and dense stays `+
-    `a loss. On MoE it's <b>${satMoe.saturation_index.toFixed(1)}×</b> what bandwidth alone `+
-    `predicts, so the card isn't bandwidth-limited on a model this small and the cores-based Path `+
-    `B is the one to trust. Bottom line: M5 Ultra beating the PRO 6000 on MoE decode is our best `+
-    `guess, not a sure thing.`;
+    `<p><b>M5 Ultra projections.</b> Projected, not measured. Two scaling paths:</p>`+
+    `<ul class="fineprint-list">`+
+    `<li><b>Path A</b> — M3 Ultra × Apple's Ultra-to-Ultra deltas: 1.5× bandwidth, `+
+    `"up to 4.5×" compute.</li>`+
+    `<li><b>Path B</b> — M5 Max × the Max→Ultra die ratio: 1.95× bandwidth, 2.0× cores.</li>`+
+    `</ul>`+
+    `<p>Every M5 Ultra number is the geometric mean of the two, capped at 2× the measured M5 Max; `+
+    `the cap binds on prefill, not decode. MoE decode: Path A `+
+    `<b>${m5uMoe.proj_paths.decode_path_a.toFixed(0)}</b> tok/s, Path B `+
+    `<b>${m5uMoe.proj_paths.decode_path_b.toFixed(0)}</b>, published `+
+    `<b>${m5uMoe.cold50_out_tps.toFixed(0)}</b> — against ${tr6Moe.cold50_out_tps.toFixed(1)} `+
+    `measured on the RTX PRO 6000. Dense decode: `+
+    `${m5uDense.proj_paths.decode_path_a.toFixed(0)}–`+
+    `${m5uDense.proj_paths.decode_path_b.toFixed(0)}, published `+
+    `<b>${m5uDense.cold50_out_tps.toFixed(0)}</b>, against `+
+    `${tr6Dense.cold50_out_tps.toFixed(1)}.</p>`;
 }
 
 /* ---------------- boot ---------------- */
 function rerenderAll(){
-  chartCtxRates(); ctxCallout(); coverageLine(); chartWarmup(); chartHeat(); chartBudget();
+  chartCtxRates(); ctxCallout(); chartWarmup(); chartHeat(); chartBudget();
   chartConc(); chartPow(); chartVsDgx();
 }
 function init(){
@@ -737,3 +711,4 @@ init();
 </script>
 </body>
 </html>
+
