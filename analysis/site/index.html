@@ -53,7 +53,7 @@
   .seg button{border:0;background:transparent;padding:8px 15px;border-radius:8px;font-size:13.5px;font-weight:700;color:var(--muted);cursor:pointer}
   .seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(16,24,40,.15)}
   .seg button .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
-  .seg button .dot.d-moe{background:#1d4ed8}.seg button .dot.d-dense{background:#dc2626}.seg button .dot.d-deepseek{background:#111827}
+  .seg button .dot.d-moe{background:#1d4ed8}.seg button .dot.d-dense{background:#dc2626}.seg button .dot.d-deepseek{background:#111827}.seg button .dot.d-next{background:#c026d3}
   select,label.pill{font-size:13.5px;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink)}
   .hint{font-size:12.5px;color:var(--muted)}
   .conc-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:12px;color:var(--muted)}
@@ -127,6 +127,7 @@
       <div><div id="ctx2" class="chart" style="height:360px"></div></div>
     </div>
     <div id="ctxLegend" class="conc-legend"></div>
+    <div id="modelCoverage" class="hint" style="margin-top:10px"></div>
     </div>
     <div class="callout" id="ctxCallout"></div>
   </section>
@@ -183,7 +184,9 @@
     <h2>5 · Power &amp; efficiency</h2>
     <p class="sub">
       Tokens per watt for <b>prompt processing (PP)</b> and <b>generation (TG)</b>, broken into
-      <b>single-user</b> vs <b>6 concurrent streams</b> (all at 10k context). The DGX Spark ×2 is
+      <b>single-user</b> vs <b>6 concurrent streams</b> (all at 10k context; where a run's 10k power
+      window is unusable the single-user panels fall back to that machine's <b>50k</b> request and
+      label the bar). The DGX Spark ×2 is
       adjusted <b>+70W per node</b> — its exporter only reads GPU power, so this is the whole-box
       estimate. M5 Ultra is a projection and has no measured power.
     </p>
@@ -194,6 +197,7 @@
       <div><div id="pow4" class="chart" style="height:260px"></div></div>
     </div>
     <div id="powLegend" class="conc-legend"></div>
+    <div id="powNote" class="hint" style="margin-top:8px"></div>
     </div>
   </section>
 
@@ -239,39 +243,44 @@
     <h2>The fine print</h2>
     <div class="card">
       <p>
-        <b>What was measured.</b> The <code>warm</code> phase of each run is one contiguous corpus
-        growing 40k&rarr;50k in 2k-token turns — a coding session that keeps appending. Session
-        wall-clock is the sum of each turn's measured <code>total_ms</code>. The no-cache estimate
-        re-prices every turn at cold-cache prefill cost for its context length (log&ndash;log
-        interpolated from measured cold points) plus the same measured generation time — what the
-        session would've cost if the server forgot the prefix every turn. Multi-user numbers sum
-        the concurrent-batch wall span per warm step.
+        <b>What was measured.</b> Each run's <code>warm</code> phase is one growing corpus —
+        40k&rarr;50k in 2k-token turns, like a coding session that keeps appending. Session
+        wall-clock is just the sum of each turn's measured <code>total_ms</code>. The no-cache
+        line re-prices every turn at cold prefill cost for its context length (log&ndash;log
+        interpolated from the measured cold points) plus the same measured generation time — what
+        the session would cost if the server forgot the prefix every turn. Multi-user numbers sum
+        the concurrent batch's wall span per warm step.
       </p>
       <p>
-        <b>Caveats.</b> No think-time between turns, so this is the best case for a session.
-        Single runs, so individual cells will wobble. Apple's prefix caching is a config thing,
-        not a hardware limit — Qwen3.6/Qwen3.8 on MLX re-processed every turn here
-        (warm&nbsp;&asymp;&nbsp;cold), but DeepSeek V4 on the same Mac did cache (2.6x speedup), so
-        bigger models get more out of it. Power/efficiency figures use the 50k runs since they're
-        long enough to sample cleanly. <b>Qwen3.6/Qwen3.8 single-user numbers are run-averaged</b>
-        across each machine's complete runs (smooths noisy decode); concurrent batches stay on the
-        latest run since streams can't be aligned across runs. Run selection, concurrency math, and
-        repro scripts live in <code>analysis/</code>.
+        <b>Caveats.</b> No think-time between turns, so these are best-case sessions, and single
+        runs wobble cell to cell. Apple's prefix caching is a config choice, not a hardware limit:
+        Qwen3.6/Qwen3.8 on MLX re-processed every turn here (warm&nbsp;&asymp;&nbsp;cold), while
+        DeepSeek V4 on the same Mac cached fine (2.6x faster). Power figures use the 50k runs —
+        long enough to sample cleanly. <b>Short-request power is dropped, not smoothed:</b> when a
+        request window reads at the run's idle floor while the box was clearly busy (the dcgm
+        exporter does this for the first ~10&nbsp;s of a run — 18&nbsp;W at 0% util on an RTX PRO
+        6000 streaming 148&nbsp;tok/s), we call that sample unmeasured, so a few boxes are missing
+        from section&nbsp;5 rather than plotted at an impossible tok/s per watt.
+        <b>Qwen3.6/Qwen3.8 single-user numbers are averaged across each machine's complete
+        runs</b> to smooth noisy decode; concurrent batches use the latest run only, since streams
+        can't be aligned across runs. Run selection, concurrency math, and repro scripts live in
+        <code>analysis/</code>.
       </p>
       <p>
-        <b>Model quants.</b> Every model ran at the <b>largest quantization that fits</b> its
-        machine, and we standardized the format across machines wherever it fits. The Apple
-        Macs (M5 Max, M3 Ultra) ran <b>MLX</b> quantized weights: <b>8-bit</b> for the
-        Qwen3.6-35B-A3B MoE, <b>4-bit</b> for the Qwen3.8-27B dense and for DeepSeek-V4-Flash.
-        The NVIDIA Blackwell boxes (vLLM) ran <b>NVFP4</b> — NVIDIA's 4-bit float, W4A4,
-        E2M1 values with an FP8 scale per 16-value block — for the dense 27B on all three, and
-        for the 35B MoE on the 32&nbsp;GB RTX&nbsp;5090; where memory allows (DGX Spark ×2,
-        RTX PRO 6000) the MoE ran at higher fidelity <b>FP8</b> (8-bit float). DeepSeek-V4-Flash
-        on the DGX used the <b>official release checkpoint</b>, which already ships quantized at
-        the source — MXFP4 4-bit routed experts with FP8 elsewhere (284B total, 13B active) — and
-        the Mac served a matching 4-bit MLX conversion. Quantization level is thus comparable
-        within a hardware family, but not bit-identical across them; read the absolute rates
-        with that in mind.
+        <b>Model quants.</b> Every model ran at the <b>largest quantization its machine could
+        hold</b>, in the same format across machines wherever that fit. The Macs (M5 Max, M3 Ultra)
+        ran <b>MLX</b>: <b>8-bit</b> for the Qwen3.6-35B-A3B MoE, <b>4-bit</b> for the Qwen3.8-27B
+        dense and DeepSeek-V4-Flash. The NVIDIA Blackwell boxes (vLLM) ran <b>NVFP4</b> — NVIDIA's
+        4-bit float, W4A4, E2M1 values with an FP8 scale per 16 values — for the dense 27B
+        everywhere and for the 35B MoE on the 32&nbsp;GB RTX&nbsp;5090; where memory allowed
+        (DGX Spark ×2, RTX PRO 6000) the MoE ran at <b>FP8</b> instead. DeepSeek-V4-Flash on the
+        DGX used the <b>official release checkpoint</b>, already quantized at the source (MXFP4
+        4-bit routed experts, FP8 elsewhere; 284B total, 13B active), with a matching 4-bit MLX
+        conversion on the Mac. <b>Qwen3.8 Next</b> is the odd one out — <b>GGUF Q8_0</b> on
+        llama.cpp/Unsloth Studio (M3 Ultra), <b>NVFP4</b> on vLLM (RTX PRO 6000), an unnamed quant
+        on <b>sglang</b> (DGX) — so its Mac row is an 8-bit llama.cpp number sitting next to 4-bit
+        MLX ones: model <i>and</i> backend change together. Quants are comparable within a hardware
+        family, not bit-identical across them; read the absolute rates with that in mind.
       </p>
       <p id="m5uFinePrint"></p>
     </div>
@@ -290,9 +299,9 @@
 const D = window.SITE_DATA;
 const $ = s => document.querySelector(s);
 const HOSTS = D.hosts;
-const MODELS = [["qwen3.6-dflash","MoE"],["qwen3.8-dflash","Dense"],["deepseekv4","DeepSeek"]];
-const MCOLOR = {"MoE":"#1d4ed8","Dense":"#dc2626","DeepSeek":"#111827"};
-let MODEL = "qwen3.6-dflash";
+const MODELS = [["deepseekv4","DeepSeek"],["qwen3.8-next","Next"],["qwen3.8-dflash","Dense"],["qwen3.6-dflash","MoE"]];
+const MCOLOR = {"MoE":"#1d4ed8","Dense":"#dc2626","DeepSeek":"#111827","Next":"#c026d3"};
+let MODEL = "deepseekv4";   // default selection = first button in MODELS
 const COH = {};
 for (const k in D.cohorts){ const c=D.cohorts[k]; COH[c.host+"|"+c.scenario]=c; }
 const cohort = (h,sc)=>COH[h+"|"+sc];
@@ -331,6 +340,27 @@ function makeSeg(id, onChange){
     el.appendChild(b);
     if(sc===MODEL) b.classList.add("on");
   });
+}
+
+/* ---------------- which machines ran the selected model ---------------- */
+function coverageLine(){
+  const cs=HOSTS.map(h=>cohort(h,MODEL)).filter(c=>c&&!isProj(c.host));
+  if(!cs.length) return;
+  const nAll=HOSTS.filter(h=>!isProj(h)).length;
+  const proj=HOSTS.some(h=>isProj(h)&&cohort(h,MODEL));
+  const serv=cs.map(c=>{
+    const s=c.serving;
+    if(!s) return `<b>${c.host_display}</b>: —`;
+    const bits=[s.server, s.model, s.quant];
+    if(s.max_model_len) bits.push(Number(s.max_model_len).toLocaleString()+" ctx cap");
+    return `<b>${c.host_display}</b>: ${bits.filter(Boolean).join(" · ")}`;
+  }).join(" &nbsp;|&nbsp; ");
+  $("#modelCoverage").innerHTML =
+    `<b>${firstCohort(MODEL).model_label}</b> ran on <b>${cs.length} of ${nAll} machines</b>`+
+    (cs.length<nAll? ` — the others were not part of this scenario, so its bars are thinner, not absent by failure`:"")+
+    (proj? "; the "+hostLabel("m5ultra")+" series is a projection, not a measurement":"")+".<br>"+
+    "Serving stacks (server · weights · context cap — they are <i>not</i> identical across machines, so "+
+    "read a cross-machine model row as model + backend together): "+serv;
 }
 
 /* ---------------- chart 1: context length — prefill & generation rates ---------------- */
@@ -529,47 +559,94 @@ function chartVsDgx(){
   const mpp=m5u.cold50_prompt_tps, d2pp=dgx2.cold50_prompt_tps;
   const m6=(m5u.conc&&m5u.conc[6]&&m5u.conc[6].wall), d6=(dgx2.conc&&dgx2.conc[6]&&dgx2.conc[6].wall);
   const m5a=agt(m5u), d2a=agt(dgx2);
+  // how much to trust THIS model's M5 Ultra row + the model-specific caveat
+  const MODEL_NOTE = {
+    "qwen3.6-dflash": "That decode lead is specific to a <b>small-MoE</b> (~3B active) — MoE as a class "+
+      "is a draw, since DeepSeek-V4 (a much larger MoE) decodes at just ~43 tok/s on this same cluster.",
+    "qwen3.8-dflash": "On the dense 27B the gap narrows to ~1.3x, and the cluster still wins ingest, "+
+      "sessions and concurrency.",
+    "deepseekv4": "DeepSeek-V4 is a much larger MoE, so the cluster keeps decode parity here and wins "+
+      "ingest, session and concurrency outright.",
+    "qwen3.8-next": "Weakest row on this page: Qwen3.8 Next is a MoE but its parameter counts are not "+
+      "recorded in the run artifact, and its M5 Ultra estimate has only ONE anchor (no M5 Max run for "+
+      "this model), so it carries no dual-anchor cross-check.",
+  };
   $("#vsdgxCallout").innerHTML =
-    `<b>M5 Ultra decodes ${fr(ms)} tok/s vs ${fr(d2d)} (DGX ×2)</b> — ${(ms/d2d).toFixed(1)}x faster single-user `+
-    `— but only for the <b>small-MoE</b> (Qwen3.6, ~3B active); MoE as a class is a draw, since DeepSeek-V4 `+
-    `(a much larger MoE) decodes at just ~43 tok/s on this same cluster. `+
-    `For a realistic agentic turn (cold 50k context, 500-token reply) <b>prefill dominates</b>, and the two land close: `+
-    `${fr(m5a)}s (M5 Ultra) vs ${fr(d2a)}s (DGX ×2) for MoE. `+
-    `DGX still wins prompt ingest (~${fr(d2pp)} vs ~${fr(mpp)} tok/s) — which matters more the larger the context — and concurrency `+
-    `(6-stream batch ~${fr(d6)}s vs ~${fr(m6)}s). M5 Ultra wins small-MoE single-user decode; DGX wins prefill-heavy and multi-user work.`;
+    `<b>${firstCohort(MODEL).model_label} on M5 Ultra decodes ${fr(ms)} tok/s vs ${fr(d2d)} (DGX ×2)</b> `+
+    `(${(ms/d2d).toFixed(1)}x). For a realistic agentic turn (cold 50k context, 500-token reply) `+
+    `<b>prefill dominates</b>, and the two land close: ${fr(m5a)}s (M5 Ultra) vs ${fr(d2a)}s (DGX ×2). `+
+    (d2pp >= mpp
+      ? `DGX still wins prompt ingest (${fr(d2pp)} vs ${fr(mpp)} tok/s) — a gap that widens with context — `
+      : `On this model the cluster's measured ingest (${fr(d2pp)} tok/s) is actually <i>behind</i> the M5 Ultra `
+        + `projection (${fr(mpp)}), so ingest is not the deciding axis here, `
+    )
+    + (d6 <= m6
+        ? `and on concurrency DGX is ahead (6-stream batch ${fr(d6)}s for DGX ×2 vs ${fr(m6)}s projected). `
+        : `and the projected 6-stream batch (${fr(m6)}s) only <i>beats</i> DGX's ${fr(d6)}s because the `
+          + `projection scales Apple's serialized session rather than a batching one — measured aggregate `
+          + `decode falls with users on Apple and rises on the cluster. `) +
+    `<i>M5 Ultra estimate: ${m5u.proj_basis||"dual-anchor"}.</i> `+
+    (MODEL_NOTE[MODEL]||"");
 }
 
 /* ---------------- chart 5b: power & efficiency ---------------- */
 function chartPow(){
-  // efficiency per host at 10k context: single (cold) and 6-concurrent (mucold)
-  const hosts=HOSTS.map(h=>cohort(h,MODEL)).filter(c=>{
-    const cb=c&&c.cold_by&&c.cold_by[10000], cn=c&&c.conc&&c.conc[6];
-    return cb&&cb.power_w!=null&&cn&&cn.power_w!=null&&cb.pp!=null&&cn.pp!=null;
-  });
-  if(!hosts.length){ $("#powLegend").innerHTML=""; return; }
-  const eff=c=>{
-    const cb=c.cold_by[10000], cn=c.conc[6];
-    return {spPP:cb.pp/cb.power_w, spTG:cb.tg/cb.power_w,
-            c6PP:cn.pp/cn.power_w, c6TG:cn.tg/cn.power_w};
-  };
-  const panels=[
-    {id:"pow1",key:"spPP",t:"PP tok/s per W — single user",note:"higher is better"},
-    {id:"pow2",key:"spTG",t:"TG tok/s per W — single user",note:"higher is better"},
-    {id:"pow3",key:"c6PP",t:"PP tok/s per W — 6 concurrent",note:"higher is better"},
-    {id:"pow4",key:"c6TG",t:"TG tok/s per W — 6 concurrent",note:"higher is better"},
-  ];
-  panels.forEach(p=>{
-    const rows=hosts.slice().sort((a,b)=> (eff(b)[p.key]||0)-(eff(a)[p.key]||0));
-    const tr={type:"bar",x:rows.map(c=>c.host_display),y:rows.map(c=>eff(c)[p.key]),
-      text:rows.map(c=>eff(c)[p.key].toFixed(2)),textposition:"outside",cliponaxis:false,
-      marker:{color:rows.map(c=>c.host_color)},
-      hovertemplate:"<b>%{x}</b><br>%{y:.2f} tok/s per W<extra></extra>"};
-    Plotly.react(p.id,[tr],{...layoutBase(),showlegend:false,legend:{visible:false},
-      title:{text:p.t+" — "+p.note,font:{size:12}},margin:{l:56,r:20,t:44,b:40},
+  // Efficiency per host, single-user (cold) and 6-concurrent (mucold). Preferred context is 10k,
+  // so these bars line up with the concurrency section. But a power window the exporter filled with
+  // the box's IDLE FLOOR is unusable (see site_data._guard_single_power) — so the single-user panels
+  // fall back to that host's 50k request and LABEL it: a labelled bar beats a vanished machine, and
+  // each panel now filters on its own measurement instead of dropping a host from all four.
+  const SCTX=[10000,50000];
+  const singleAt=c=>{for(const ctx of SCTX){const cb=c&&c.cold_by&&c.cold_by[ctx];
+      if(cb&&cb.power_w!=null&&cb.pp!=null&&cb.tg!=null) return [cb,ctx];} return null;};
+  const sixAt=c=>{const cn=c&&c.conc&&c.conc[6];
+      return (cn&&cn.power_w!=null&&cn.pp!=null&&cn.tg!=null)?[cn,null]:null;};
+  const live=HOSTS.map(h=>cohort(h,MODEL)).filter(c=>c&&!isProj(c.host));
+  const panels=[["pow1","single","pp","PP tok/s per W — single user"],
+                ["pow2","single","tg","TG tok/s per W — single user"],
+                ["pow3","six","pp","PP tok/s per W — 6 concurrent"],
+                ["pow4","six","tg","TG tok/s per W — 6 concurrent"]];
+  const shown=new Set(), fb=new Set();
+  panels.forEach(([id,src,field,title])=>{
+    const rows=[];
+    live.forEach(c=>{
+      const s=src==="single"?singleAt(c):sixAt(c);
+      if(!s) return;
+      const [m,ctx]=s;
+      const off = ctx && ctx!==10000;          // 10k is the section's reference context
+      rows.push({display: off ? `${c.host_display} (${Math.round(ctx/1000)}k req.)` : c.host_display,
+                 color:c.host_color, v:m[field]/m.power_w});
+      shown.add(c.host);
+      if(off) fb.add(c.host_display);
+    });
+    rows.sort((a,b)=>b.v-a.v);
+    Plotly.react(id,[{type:"bar",x:rows.map(r=>r.display),y:rows.map(r=>r.v),
+      text:rows.map(r=>r.v.toFixed(2)),textposition:"outside",cliponaxis:false,
+      marker:{color:rows.map(r=>r.color)},
+      hovertemplate:"<b>%{x}</b><br>%{y:.2f} tok/s per W<extra></extra>"}],
+      {...layoutBase(),showlegend:false,legend:{visible:false},
+      title:{text:title+(rows.length?" — higher is better":" — no usable power reading"),font:{size:12}},
+      margin:{l:56,r:20,t:44,b:40},
       xaxis:{title:"",tickangle:-30,tickfont:{size:7.5}},yaxis:{title:"tok/s per W",rangemode:"tozero"}});
   });
-  $("#powLegend").innerHTML=hosts.map(c=>
+  $("#powLegend").innerHTML=live.filter(c=>shown.has(c.host)).map(c=>
     `<span><span class="sw" style="background:${c.host_color}"></span>${c.host_display}</span>`).join("");
+  // say out loud which boxes are missing and why — an idle-floor read makes tok/s-per-watt
+  // meaningless rather than merely noisy, so those machines are named instead of hidden
+  const dropped=live.filter(c=>!shown.has(c.host));
+  const bits=[];
+  if(dropped.length) bits.push("Omitted from all four panels — no usable power anywhere in this model's "
+      + "run on that box (every request window read the exporter's idle floor, or the batch has no "
+      + "power reading): " + dropped.map(c=>c.host_display).join(", ") + ".");
+  if(fb.size) bits.push("Single-user bars labelled with a context (" + [...fb].join(", ") + ") have an "
+      + "unusable 10k power window, so they use that machine's 50k request — a longer, colder request "
+      + "than the 10k bars beside them, so treat the numbers as close neighbours, not twins.");
+  if(fb.size && MODEL==="qwen3.8-next" && live.some(c=>c.host==="tr-pro-6000"&&shown.has(c.host)))
+    bits.push("For the RTX PRO 6000 here, go further: its 10k window read the exporter's idle floor "
+      + "and its 50k window is the run's own ramp-up (a 153 W median from a trace that starts pinned at "
+      + "18 W and reaches 379-421 W later), so its single-user bars are an <b>optimistic bound</b>, not "
+      + "a measurement. Its 6-stream panels are the trustworthy ones — by then the card is warm.");
+  $("#powNote").innerHTML = bits.join("<br>");
 }
 
 /* ---------------- verdict ---------------- */
@@ -617,41 +694,34 @@ function verdict(){
       ${moe.find(c=>c.host==="gx10-top").cold50_out_tps.toFixed(0)} tok/s), but that's specific to
       small MoE — DeepSeek V4, a much bigger MoE, decodes at ~43 tok/s on the DGX either way, no better
       than dense. DGX wins prefill on every model, plus concurrency, plus dense sessions. Buy DGX for
-      agents, teams, or dense models; M5 Ultra only if you're one person decoding a small MoE all day.`) +
-    rec("Two things worth knowing",
-      `MoE beats dense everywhere except the RTX PRO 6000 — that card has so much bandwidth the
-      model size stops mattering (1.4–2.1× faster decode, up to 5× faster prefill elsewhere). And
-      Apple's slow caching in this benchmark isn't an MLX ceiling: it re-processed every turn for
-      Qwen but cached fine for DeepSeek V4 on the same machine — a server-config miss, not a hardware
-      limit.`);
+      agents, teams, or dense models; M5 Ultra only if you're one person decoding a small MoE all day.`) ;
 
   // ---- M5 Ultra methodology fine print (dual-anchor assumptions, spelled out) ----
   const m5uMoe = moe.find(c=>c.host==="m5ultra"), m5uDense = dense.find(c=>c.host==="m5ultra");
   const tr6Moe = moe.find(c=>c.host==="tr-pro-6000"), tr6Dense = dense.find(c=>c.host==="tr-pro-6000");
   const satMoe = m5uMoe.bw_saturation_vs_tr6000, satDense = m5uDense.bw_saturation_vs_tr6000;
   $("#m5uFinePrint").innerHTML =
-    `<b>M5 Ultra projections.</b> We anchor on two real chips, not one guess. Path A scales `+
-    `M3 Ultra by Apple's official Ultra-vs-Ultra deltas (1.5× bandwidth, "up to 4.5×" compute). `+
-    `Path B scales M5 Max by the physical Max→Ultra die ratio (1.95× bandwidth, 2.0× cores — an `+
-    `actual die count, not a marketing figure). The published number is their geometric mean, `+
-    `capped so that nothing beats the measured M5 Max by more than 2× — an Ultra is two Max dies, `+
-    `so it can't. That cap binds on prefill (Apple's "4.5× compute" would otherwise imply an Ultra `+
-    `ingesting 3.2× faster than the Max it's built from) and not on decode. `+
-    `The paths don't just disagree on magnitude — on MoE decode, Path B has M5 Ultra beating the `+
-    `RTX PRO 6000 (<b>${m5uMoe.proj_paths.decode_path_b.toFixed(0)}</b> vs `+
-    `${tr6Moe.cold50_out_tps.toFixed(1)} tok/s); Path A alone has it losing `+
-    `(<b>${m5uMoe.proj_paths.decode_path_a.toFixed(0)}</b>). To pick a winner we check whether `+
-    `the PRO 6000 is actually bandwidth-saturated: on dense its measured-vs-predicted ratio is `+
-    `${(satDense.saturation_index).toFixed(1)}× — it's bandwidth-bound, so Path A holds and dense `+
-    `stays a loss. On MoE the ratio is <b>${satMoe.saturation_index.toFixed(1)}×</b> what bandwidth `+
-    `alone predicts, meaning the PRO 6000 isn't bandwidth-limited on a model this small — so the `+
-    `cores-based Path B is the one to trust there. Bottom line: M5 Ultra beating the PRO 6000 on `+
-    `MoE decode is our best guess, not a sure thing.`;
+    `<b>M5 Ultra projections.</b> Two anchors, not one guess. Path A scales M3 Ultra by Apple's `+
+    `official Ultra-to-Ultra deltas (1.5× bandwidth, "up to 4.5×" compute). Path B scales M5 Max `+
+    `by the physical Max→Ultra die ratio (1.95× bandwidth, 2.0× cores — a die count, not a `+
+    `marketing figure). We publish their geometric mean, capped at 2× the measured M5 Max: an `+
+    `Ultra is two Max dies, so it can't do better. The cap binds on prefill (that "4.5× compute" `+
+    `would otherwise imply an Ultra ingesting 3.2× faster than the Max it's built from), not on `+
+    `decode. The paths disagree about more than magnitude — on MoE decode Path B has M5 Ultra `+
+    `beating the RTX PRO 6000 (<b>${m5uMoe.proj_paths.decode_path_b.toFixed(0)}</b> vs `+
+    `${tr6Moe.cold50_out_tps.toFixed(1)} tok/s), Path A has it losing `+
+    `(<b>${m5uMoe.proj_paths.decode_path_a.toFixed(0)}</b>). The tie-breaker is whether the PRO `+
+    `6000 is actually bandwidth-saturated. On dense, measured-vs-predicted is `+
+    `${(satDense.saturation_index).toFixed(1)}× — bandwidth-bound, so Path A holds and dense stays `+
+    `a loss. On MoE it's <b>${satMoe.saturation_index.toFixed(1)}×</b> what bandwidth alone `+
+    `predicts, so the card isn't bandwidth-limited on a model this small and the cores-based Path `+
+    `B is the one to trust. Bottom line: M5 Ultra beating the PRO 6000 on MoE decode is our best `+
+    `guess, not a sure thing.`;
 }
 
 /* ---------------- boot ---------------- */
 function rerenderAll(){
-  chartCtxRates(); ctxCallout(); chartWarmup(); chartHeat(); chartBudget();
+  chartCtxRates(); ctxCallout(); coverageLine(); chartWarmup(); chartHeat(); chartBudget();
   chartConc(); chartPow(); chartVsDgx();
 }
 function init(){

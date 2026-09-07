@@ -2,7 +2,7 @@
 
 Benchmark the **same open-weight model across heterogeneous hardware** — DGX Spark / Grace-Blackwell (vLLM) to Apple M3 Ultra (MLX/omlx) — with realistic corpora and a durable, chartable artifact per run.
 
-Current target model: **DeepSeek V4 Flash** (DeepSeek-V4-Flash-0731 on gx10-top, DeepSeek-V4-Flash-4bit MLX on macstudio).
+Current target model: **DeepSeek V4 Flash** (DeepSeek-V4-Flash-0731 on gx10-top, DeepSeek-V4-Flash-4bit MLX on macstudio). Latest scenario added: **Qwen3.8-Flash-Next** (`config/scenarios/qwen3.8-next.yaml` — macstudio/GGUF, gx10-top/sglang, tr-pro-6000/vLLM), analysed in `analysis/ANALYSIS.md` §1b and in `analysis/site/index.html`.
 
 ## What it measures
 

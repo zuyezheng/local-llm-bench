@@ -23,8 +23,8 @@
 <body>
 <header>
   <h1>Local-LLM hardware: which machine is worth it, and for whom</h1>
-  <p>MoE vs dense · concurrency · context length &amp; caching — measured across 5 machines.
-     Full narrative in <code>analysis/ANALYSIS.md</code>.</p>
+  <p>MoE vs dense vs Qwen3.8 Next · concurrency · context length &amp; caching — measured
+     across 5 machines and 4 models. Full narrative in <code>analysis/ANALYSIS.md</code>.</p>
 </header>
 <main>
 
@@ -42,7 +42,8 @@
   <figcaption>
     <span class="n">02</span> · <span class="t">Prompt processing throughput vs context length (cold, log-log)</span>
     <div class="d">PP = prompt tokens / TTFT, so it's fair across context lengths. The RTX PRO 6000 ingests
-      ~5,000–20,000 tok/s vs a few hundred on Apple — a ~20x gap that grows with context.</div>
+      ~5,000–20,000 tok/s vs a few hundred on Apple — a ~20x gap that grows with context. Third panel:
+      Qwen3.8 Next (3 machines), whose PP barely degrades with context.</div>
   </figcaption>
 </figure>
 
@@ -50,8 +51,10 @@
   <img src="03_cache_effect.png" alt="Prefix caching effect">
   <figcaption>
     <span class="n">03</span> · <span class="t">Prefix caching at ~50k context — warm vs cold prompt processing</span>
-    <div class="d">NVIDIA/vLLM hosts ingest a cached turn at 3–17x the fresh-prompt rate. The Apple MLX
-      stack in these runs re-processed the full context every turn (warm ≈ cold, no gain).</div>
+    <div class="d">NVIDIA/vLLM/sglang hosts ingest a cached turn at 3–18x the fresh-prompt rate (Qwen3.8 Next
+      on the cluster: 15.3x). Both Apple stacks in these runs — omlx for the Qwens, llama.cpp/GGUF for
+      Qwen3.8 Next — re-processed the full context every turn (warm ≈ cold, no gain), so the Apple bars
+      ASSUME vLLM-equivalent caching rather than measuring it.</div>
   </figcaption>
 </figure>
 
@@ -60,8 +63,9 @@
   <figcaption>
     <span class="n">04</span> · <span class="t">Overlap-based aggregate throughput vs concurrent users @10k context</span>
     <div class="d">Aggregate is measured over the window where all streams decode together.
-      vLLM servers (RTX PRO 6000, DGX Spark) genuinely batch and scale; Apple/MLX and the RTX 5090
-      serialize (ov 0%). DeepSeek included as a larger-MoE reference.</div>
+      vLLM/sglang servers (RTX PRO 6000, DGX Spark) genuinely batch and scale; Apple/MLX and the RTX 5090
+      serialize (ov 0%). DeepSeek included as a larger-MoE reference. New in panel 3: Qwen3.8 Next scales
+      3.0x on the cluster but serialized at ov 0% on the very PRO 6000 instance that batched both Qwens.</div>
   </figcaption>
 </figure>
 
@@ -70,7 +74,8 @@
   <figcaption>
     <span class="n">05</span> · <span class="t">Per-stream latency vs concurrent users @10k context</span>
     <div class="d">Dense on Apple under 6 users reaches ~2 minutes per stream; DeepSeek on a Mac
-      ~3 minutes; MoE cuts Apple to ~30s, and the NVIDIA hosts stay under ~40s.</div>
+      ~3 minutes; Qwen3.8 Next on that Mac ~2.3 minutes; MoE cuts Apple to ~30s, and the NVIDIA hosts
+      stay under ~45s.</div>
   </figcaption>
 </figure>
 
@@ -78,8 +83,9 @@
   <img src="06_efficiency.png" alt="Tokens per watt">
   <figcaption>
     <span class="n">06</span> · <span class="t">Generation efficiency (tokens/s per watt) @50k context</span>
-    <div class="d">The DGX Spark leads efficiency (0.82 tok/s/W); MoE roughly doubles efficiency
-      on every host. Bar labels show average power draw.</div>
+    <div class="d">Generation efficiency once the DGX Spark's whole box is counted (~+70 W per node)
+      is ~0.32 tok/s/W — behind the RTX 5090 and M5 Max; MoE roughly doubles efficiency on every host.
+      Bar labels show average power draw.</div>
   </figcaption>
 </figure>
 
@@ -90,7 +96,19 @@
     <div class="d">RTX PRO 6000 is the only box that is both fast and scales (top-right) — the
       multi-user choice (dense: 286 tok/s at 6 users). DGX Spark scales 3x but is mid-speed;
       RTX 5090 is fast alone but serializes; Apple is efficient but single-user only. DeepSeek
-      marked with diamonds.</div>
+      marked with diamonds, Qwen3.8 Next with triangles.</div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="08_qwen38_next_three_way.png" alt="Qwen3.8 Next three-way comparison">
+  <figcaption>
+    <span class="n">08</span> · <span class="t">Qwen3.8 Next vs MoE vs dense — the three machines all three ran</span>
+    <div class="d">M3 Ultra / GB10 ×2 / RTX PRO 6000 (the scenario skipped the M5 Max and the RTX 5090).
+      It nearly matches the MoE on the workstation GPU (139.5 vs 158.9 tok/s decode @50k), is the
+      slowest model measured on Apple (22.6 — GGUF Q8_0 under llama.cpp, not MLX), scales 3.0x on the
+      cluster, and its Apple session bar ASSUMES prefix caching. One run per machine, so no averaging.
+      </div>
   </figcaption>
 </figure>
 

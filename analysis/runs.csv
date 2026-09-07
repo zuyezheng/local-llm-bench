@@ -21,3 +21,6 @@ qwen3.8-dflash,20260830-204747-tr-pro-5090-qwen3.8-dflash,tr-pro-5090,unsloth/Qw
 qwen3.8-dflash,20260830-204747-macstudio-qwen3.8-dflash,macstudio,Qwen3.8-27B-MLX-4bit,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-08-31T03:47:47
 qwen3.8-dflash,20260830-204747-tr-pro-6000-qwen3.8-dflash,tr-pro-6000,unsloth/Qwen3.8-27B-NVFP4,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-08-31T03:47:47
 qwen3.8-dflash,20260830-204747-gx10-top-qwen3.8-dflash,gx10-top,unsloth/Qwen3.8-27B-NVFP4,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-08-31T03:47:47
+qwen3.8-next,20260906-202237-gx10-top-qwen3.8-next,gx10-top,qwen3.8-flash-next,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-09-07T03:22:37
+qwen3.8-next,20260906-202237-tr-pro-6000-qwen3.8-next,tr-pro-6000,primitive-ai/Qwen3.8-Flash-Next-NVFP4,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-09-07T03:22:37
+qwen3.8-next,20260906-202238-macstudio-qwen3.8-next,macstudio,Qwen3.8-Flash-Next-GGUF,ok,131,131,cold=5 mucold=48 muwarm=72 warm=6,2026-09-07T03:22:38

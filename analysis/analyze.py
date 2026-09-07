@@ -43,12 +43,19 @@ HOST_META: dict[str, dict] = {
 }
 
 # scenario -> architecture + human model label
+#
+# `arch` is the model's structural class. Qwen3.8 Next is a MoE; what the run
+# artifacts do NOT record are its parameter counts — they keep only what the
+# servers advertise (model id `Qwen3.8-Flash-Next`, GGUF Q8_0 on the Mac, NVFP4
+# on vLLM, max_model_len 262144), so its `params_*` stay "n/r" = not recorded
+# and any claim about it is sized from measured behaviour, not a datasheet.
 SCENARIO_META: dict[str, dict] = {
     "qwen3.6-dflash": {"arch": "MoE",   "label": "Qwen3.6-35B-A3B", "params_total": "35B", "params_active": "3B",  "short": "Qwen3.6 (MoE)"},
     "qwen3.8-dflash": {"arch": "Dense", "label": "Qwen3.8-27B",    "params_total": "27B", "params_active": "27B", "short": "Qwen3.8 (dense)"},
     "qwen3.8-2":      {"arch": "Dense", "label": "Qwen3.8-27B",    "params_total": "27B", "params_active": "27B", "short": "Qwen3.8 (dense)"},
     "qwen3.8":        {"arch": "Dense", "label": "Qwen3.8-27B",    "params_total": "27B", "params_active": "27B", "short": "Qwen3.8 (dense)"},
-    "deepseekv4":     {"arch": "MoE",   "label": "DeepSeek-V4-Flash", "params_total": "?B", "params_active": "?B", "short": "DeepSeek-V4 (MoE)"},
+    "qwen3.8-next":   {"arch": "MoE",   "label": "Qwen3.8 Next",     "params_total": "n/r", "params_active": "n/r", "short": "Qwen3.8 Next (MoE)"},
+    "deepseekv4":     {"arch": "MoE",   "label": "DeepSeek-V4-Flash", "params_total": "284B", "params_active": "13B", "short": "DeepSeek-V4 (MoE)"},
 }
 
 
@@ -168,6 +175,8 @@ def build_dataset() -> dict[str, Any]:
             # only counts NEW tokens, which is a different base).
             "prompt_tps_eff": stat_of(rows, lambda s: s["prompt_tokens"] / (s["ttft_ms"] / 1000.0)),
             "out_tps": stat(rows, "out_tps"),
+            "tg_ms": stat(rows, "tg_ms"),
+            "total_ms": stat(rows, "total_ms"),
             "power_w": stat(rows, "power_w"),
             "tps_per_w": stat(rows, "tps_per_w"),
         } for ctx, rows in grp(warm, lambda s: s["step"]).items()}

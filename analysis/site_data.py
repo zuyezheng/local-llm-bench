@@ -33,6 +33,7 @@ STEPS = [40000, 42000, 44000, 46000, 48000, 50000]
 SCENARIO_META = {
     "qwen3.6-dflash": {"arch": "MoE",   "label": "Qwen3.6-35B-A3B", "short": "Qwen3.6 · MoE"},
     "qwen3.8-dflash": {"arch": "Dense", "label": "Qwen3.8-27B",    "short": "Qwen3.8 · Dense"},
+    "qwen3.8-next":   {"arch": "MoE",   "label": "Qwen3.8 Next",       "short": "Qwen3.8 Next · MoE"},
     "deepseekv4":     {"arch": "MoE",   "label": "DeepSeek-V4-Flash", "short": "DeepSeek V4"},
 }
 HOST_META = {
@@ -45,7 +46,7 @@ HOST_META = {
     "m5ultra":     {"display": "M5 Ultra (projected)", "class": "Apple", "color": "#0ea5e9", "projected": True},
 }
 HOST_ORDER = ["m5-max", "macstudio", "gx10-top", "tr-pro-5090", "tr-pro-6000", "m5ultra"]
-ARCH_COLOR = {"MoE": "#1d4ed8", "Dense": "#dc2626", "DeepSeek": "#111827"}
+ARCH_COLOR = {"MoE": "#1d4ed8", "Dense": "#dc2626", "DeepSeek": "#111827", "Next": "#c026d3"}
 
 # ---------------------------------------------------------------------------
 # M5 Ultra projection — dual-anchor scaling, not one marketing multiplier.
@@ -176,12 +177,10 @@ def canonical_run_id(scenario: str, host: str) -> str | None:
     return best[1]
 
 
-def _batch_power_from_metrics(run_dir, streams, adjust_w: float = 0.0) -> float | None:
-    """Average whole-box power over a concurrent batch's full span, from the
-    run's metrics time-series (summed across cluster nodes). Per-stream power_w
-    is unreliable for short concurrent requests (median over idle queue gaps),
-    so this is the honest concurrent power draw."""
-    mrows = [r for r in read_jsonl(run_dir / "metrics.jsonl")]
+def _power_series(run_dir):
+    """(ts -> summed watts) across every node in a run's metrics trace, plus the
+    power key used. None if the run has no power exporter."""
+    mrows = read_jsonl(run_dir / "metrics.jsonl")
     keys: set[str] = set()
     for r in mrows:
         m = r.get("metrics")
@@ -189,13 +188,70 @@ def _batch_power_from_metrics(run_dir, streams, adjust_w: float = 0.0) -> float 
             keys.update(m.keys())
     pkey = "total_power_w" if "total_power_w" in keys else ("gpu_power_w" if "gpu_power_w" in keys else None)
     if not pkey:
-        return None
+        return None, None
     series: dict[float, float] = {}
     for r in mrows:
         m = r.get("metrics")
         if not isinstance(m, dict) or m.get(pkey) is None:
             continue
         series[r["ts_epoch"]] = series.get(r["ts_epoch"], 0.0) + m[pkey]
+    return (series or None), pkey
+
+
+def _idle_floor_w(run_dir) -> float | None:
+    """Lowest summed whole-box draw seen anywhere in a run's trace = its idle
+    floor. Used to catch stale exporter reads (see _guard_single_power)."""
+    series, _ = _power_series(run_dir)
+    return min(series.values()) if series else None
+
+
+def _guard_single_power(sample: dict, floor: float | None, adjust_w: float = 0.0) -> float | None:
+    """Single-user power over one request window, or None when unmeasurable.
+
+    A request window whose reading sits at the run's idle floor while the box was
+    demonstrably busy is a stale exporter read, not an idle GPU: the dcgm
+    exporter is known to report the idle value (and 0% util) for the first ~10 s
+    of a run, so short requests that open a run — and short requests generally —
+    can carry a floor value (e.g. 18 W measured for an RTX PRO 6000 streaming at
+    148 tok/s). Dividing through by that yields impossible efficiencies
+    (hundreds of tok/s per watt), so those samples are dropped instead of
+    plotted, exactly as ANALYSIS.md already excludes short-request power.
+
+    `adjust_w` is the whole-box estimate already ADDED to the sample by
+    run_averaging.adjust_power; it is subtracted back off before the comparison
+    so a cluster's +70W/node constant can't mask a stale idle reading.
+    """
+    pw = sample.get("power_w")
+    if pw is None:
+        return None
+    if floor is not None and pw - adjust_w <= floor * 1.05:
+        return None
+    return pw
+
+
+def _serving(run_dir) -> dict | None:
+    """What actually served this run (server vendor, model id, quant, context
+    cap) — from run.json's model_spec. Surfaces e.g. GGUF/llama.cpp vs MLX vs
+    vLLM vs sglang so cross-machine model rows are read with their backends."""
+    run = read_json(run_dir / "run.json") or {}
+    ms = run.get("model_spec") or {}
+    raw = ms.get("raw") or {}
+    if not ms:
+        return None
+    return {
+        "server": ms.get("owned_by") or "unknown",
+        "model": ms.get("model") or "",
+        "quant": raw.get("quant"),
+        "max_model_len": ms.get("max_model_len") or raw.get("max_model_len") or raw.get("context_length"),
+    }
+
+
+def _batch_power_from_metrics(run_dir, streams, adjust_w: float = 0.0) -> float | None:
+    """Average whole-box power over a concurrent batch's full span, from the
+    run's metrics time-series (summed across cluster nodes). Per-stream power_w
+    is unreliable for short concurrent requests (median over idle queue gaps),
+    so this is the honest concurrent power draw."""
+    series, pkey = _power_series(run_dir)
     if not series:
         return None
     start = min(s["ts_start_epoch"] for s in streams)
@@ -234,6 +290,11 @@ def build_site_data() -> dict[str, Any]:
             else:
                 samples = [adjust_power(s) for s in read_jsonl(RESULTS / scenario / rid / "samples.jsonl") if s.get("ok")]
                 conc_run = rid
+            run_dir = RESULTS / scenario / conc_run
+            # idle floor of THIS run's power trace, for the stale-reading guard
+            pw_floor = _idle_floor_w(run_dir)
+            pw_adjust = POWER_ADJUST_W.get(host, 0.0)
+            serving = _serving(RESULTS / scenario / (rid if rid != "averaged" else conc_run))
             warm = {s["step"]: s for s in samples if s["phase"] == "warm"}
             cold = {s["step"]: s for s in samples if s["phase"] == "cold"}
             mucold = [s for s in samples if s["phase"] == "mucold"]
@@ -331,7 +392,7 @@ def build_site_data() -> dict[str, Any]:
             conc[1] = {"tg": c10.get("out_tps"), "pp": c10.get("prompt_tps"),
                        "wall": (c10.get("total_ms") or 0) / 1000.0,
                        "lat": (c10.get("total_ms") or 0) / 1000.0,
-                       "power_w": c10.get("power_w")}
+                       "power_w": _guard_single_power(c10, pw_floor, pw_adjust)}
 
             # single-user reference: cold decode @50k + cold TTFT @50k
             cold50 = cold.get(50000, {})
@@ -341,12 +402,13 @@ def build_site_data() -> dict[str, Any]:
             for ctx in (1000, 10000, 50000, 100000, 200000, 400000):
                 s = cold.get(ctx)
                 if s:
+                    pw = _guard_single_power(s, pw_floor, pw_adjust)
                     cold_by[str(ctx)] = {
                         "ttft_ms": s["ttft_ms"], "gen_ms": s["tg_ms"],
                         "total_ms": s["total_ms"], "pp": s["prompt_tps"], "tg": s["out_tps"],
-                        "power_w": s.get("power_w"),
+                        "power_w": pw,
                         # ratio of the (possibly averaged) values, not a mean of ratios
-                        "tps_per_w": (s["out_tps"] / s["power_w"]) if (s.get("power_w") and s.get("out_tps")) else None,
+                        "tps_per_w": (s["out_tps"] / pw) if (pw and s.get("out_tps")) else None,
                     }
 
             cohorts[f"{scenario}__{host}"] = {
@@ -361,6 +423,7 @@ def build_site_data() -> dict[str, Any]:
                 "host_color": hmeta["color"],
                 "run_id": rid,
                 "cache_revised": cache_revised,
+                "serving": serving,
                 "turns": turns,
                 "session_s": session_s,
                 "gen_s": gen_s,

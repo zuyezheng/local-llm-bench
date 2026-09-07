@@ -1,0 +1,61 @@
+# Scenario: qwen3.8-next
+# Qwen3.8 Flash-Next benchmarked across three machines: an Apple-silicon host
+# (MLX/omlx), an NVIDIA DGX-class cluster (sglang), and the workstation-class
+# card of a mixed-GPU box (vLLM). Cloned from qwen3.8-dflash with an identical
+# workload so the two scenarios are directly comparable; m5-max and the
+# RTX 5090 are deliberately not part of this scenario.
+# Machine configs (hosts + clusters + exporters) are part of the scenario so each
+# (model, machines, workload) combo is one self-contained run file. Real host
+# URLs live in a local, gitignored override (see README.md "Config" section, or
+# config/scenarios/example-mac.yaml / example-linux.yaml for the shape) —
+# this file intentionally ships without a `hosts:` block.
+#
+# Usage:  uv run llm-bench run --scenario config/scenarios/qwen3.8-next.yaml \
+#           --config config/local/qwen3.8-next.hosts.yaml
+
+name: qwen3.8-next
+tag: qwen3.8-next
+
+max_tokens: 512
+temperature: 0.0
+cold_iters: 1
+warm_sessions: 1
+
+# Concurrency is covered by the multi-user phase below (distinct context per
+# user), so the fixed 1-6 concurrency sweep is skipped automatically.
+
+# ------------------------------- single user -------------------------------
+# The 200000 step only runs where the server allows it: the effective cap per
+# host is min(host.max_context, /v1/models max_model_len), so a host that
+# advertises less simply drops the oversized steps (bench/benchmark.py).
+context_lengths: [1000, 10000, 50000, 100000, 200000]
+# Warm cache: coding session, +2k context per step (well under any cap)
+warm_sizes: [40000, 42000, 44000, 46000, 48000, 50000]
+
+# ------------------------------ multi user ---------------------------------
+# 2 / 4 / 6 users. Each user gets a DIFFERENT context slice (never shared), all
+# resident in the same pool AT ONCE. Worst case here is 6 users x 30000 tokens
+# = 180k concurrent tokens, comfortably under every host's KV budget even
+# during the single-user cold/warm phases' own peak.
+multi_users: [2, 4, 6]
+multi_user_contexts: [1000, 10000, 20000, 30000]
+# Warm cache: per-user coding session, +2k context per step
+multi_user_warm_sizes: [10000, 12000, 14000, 16000, 18000, 20000]
+multi_user_batches: 1
+
+# -------------------------------- machines ---------------------------------
+metrics_interval: 2.0
+metrics_enabled: true
+
+# client timeouts (seconds). read_timeout is the max silence before a request is
+# aborted client-side and retried once; timeout is the hard total per request.
+# The per-request budget also scales read_timeout by prompt size (min_pp_tps).
+timeout: 900
+read_timeout: 900
+
+# -------------------------------- hosts -------------------------------------
+# No `hosts:` key here on purpose — real machine URLs are environment-specific
+# and stay out of the public repo. Provide them via a local override layered
+# in with --config, e.g. config/local/qwen3.8-next.hosts.yaml (3 hosts:
+# 1x MLX/macmon, 1x sglang/dcgm cluster, 1x vLLM/dcgm on a mixed-GPU box — see
+# example-mac.yaml / example-linux.yaml for the per-host shape).
